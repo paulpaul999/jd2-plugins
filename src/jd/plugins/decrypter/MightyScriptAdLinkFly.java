@@ -55,7 +55,7 @@ import jd.plugins.components.SiteType.SiteTemplate;
  *            With solvemedia: clik.pw
  *
  */
-@DecrypterPlugin(revision = "$Revision: 48392 $", interfaceVersion = 2, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48454 $", interfaceVersion = 2, names = {}, urls = {})
 public abstract class MightyScriptAdLinkFly extends antiDDoSForDecrypt {
     public enum CaptchaType {
         hCaptcha,
@@ -155,7 +155,7 @@ public abstract class MightyScriptAdLinkFly extends antiDDoSForDecrypt {
              */
             final String reCaptchaSiteURL;
             if (this.getSpecialReferer() != null) {
-                /* Required e.g. for sh2rt.com. */
+                /* Required e.g. for ClicksflyCom. */
                 reCaptchaSiteURL = br.getBaseURL();
             } else if (this.autoDetectedSpecialReferer.get() != null) {
                 /* E.g. up4cash.com */
@@ -244,7 +244,7 @@ public abstract class MightyScriptAdLinkFly extends antiDDoSForDecrypt {
                         }
                         final String siteURL;
                         if (this.getSpecialReferer() != null) {
-                            /* Required e.g. for sh2rt.com. */
+                            /* Required e.g. for ClicksflyCom. */
                             siteURL = br.getBaseURL();
                         } else {
                             /* Fine for most of all websites. */
