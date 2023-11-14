@@ -2,6 +2,7 @@ package jd.plugins.hoster;
 
 import jd.PluginWrapper;
 import jd.http.Browser;
+import jd.parser.Regex;
 import jd.plugins.Account;
 import jd.plugins.DownloadLink;
 import jd.plugins.DownloadLink.AvailableStatus;
@@ -67,6 +68,24 @@ public class PovrCom extends PluginForHost {
     @Override
     public String getAGBLink() {
         return "https://povr.com/legal#terms";
+    }
+
+    private String getFID(final DownloadLink link) {
+        String urlName = new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0);
+        String[] parts = urlName.split("-");
+        int lastElementIdx = parts.length - 1;
+        String sceneID = parts[lastElementIdx];
+        return sceneID;
+    }
+
+    @Override
+    public String getLinkID(final DownloadLink link) {
+        final String fid = getFID(link);
+        if (fid != null) {
+            return this.getHost() + "://" + fid;
+        } else {
+            return super.getLinkID(link);
+        }
     }
 
     @Override
