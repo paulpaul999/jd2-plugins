@@ -26,6 +26,8 @@ import org.appwork.utils.StringUtils;
 import org.appwork.utils.formatter.SizeFormatter;
 import org.appwork.utils.formatter.TimeFormatter;
 import org.appwork.utils.parser.UrlQuery;
+import org.jdownloader.captcha.v2.challenge.recaptcha.v2.AbstractRecaptchaV2;
+import org.jdownloader.captcha.v2.challenge.recaptcha.v2.CaptchaHelperHostPluginRecaptchaV2;
 
 import jd.PluginWrapper;
 import jd.http.Browser;
@@ -47,7 +49,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 import jd.plugins.components.SiteType.SiteTemplate;
 
-@HostPlugin(revision = "$Revision: 48453 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48480 $", interfaceVersion = 3, names = {}, urls = {})
 public class RosefileNet extends PluginForHost {
     public RosefileNet(PluginWrapper wrapper) {
         super(wrapper);
@@ -182,27 +184,45 @@ public class RosefileNet extends PluginForHost {
             if (internalFileID == null) {
                 throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
             }
-            final Browser ajax = this.br.cloneBrowser();
+            final Browser ajax = br.cloneBrowser();
             ajax.getHeaders().put("X-Requested-With", "XMLHttpRequest");
             final boolean looksLikePremiumADownloadWithoutWait = br.containsHTML("load_down");
             if (account != null && looksLikePremiumADownloadWithoutWait) {
                 final UrlQuery query = new UrlQuery();
-                query.add("action", "check_recaptcha");
+                query.add("action", "check_recaptchac");
                 query.add("file_id", internalFileID);
                 ajax.postPage("/ajax.php", query);
             } else {
                 /** 2021-04-12: Waittime and captcha (required for anonymous downloads in browser) is skippable! */
-                br.getPage("/ajax.php?action=load_time&ctime=" + System.currentTimeMillis());
-                final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
-                final int waitSeconds = ((Number) entries.get("waittime")).intValue();
-                this.sleep(waitSeconds * 1001l, link);
-                br.getPage("https://" + this.br.getHost() + "/d/" + this.getFID(link) + "/" + Encoding.urlEncode(link.getName()) + ".html");
-                final String code = getCaptchaCode("/imagecode.php?t=" + System.currentTimeMillis(), link);
-                br.postPage("/ajax.php", "action=check_code&code=" + Encoding.urlEncode(code));
-                if (br.getRequest().getHtmlCode().equalsIgnoreCase("false")) {
-                    throw new PluginException(LinkStatus.ERROR_CAPTCHA);
+                ajax.getPage("/ajax.php?action=load_time&ctime=" + System.currentTimeMillis());
+                final Map<String, Object> entries = restoreFromString(ajax.getRequest().getHtmlCode(), TypeRef.MAP);
+                final int waitSeconds = ((Number) entries.get("waittime_s")).intValue();
+                if (waitSeconds > 300) {
+                    throw new PluginException(LinkStatus.ERROR_IP_BLOCKED, waitSeconds * 1000l);
                 }
-                ajax.postPage("/ajax.php", "action=load_down_addr1&file_id=" + internalFileID);
+                this.sleep(waitSeconds * 1001l, link);
+                br.getPage("/d/" + this.getFID(link) + "/" + Encoding.urlEncode(link.getName()) + ".html");
+                if (AbstractRecaptchaV2.containsRecaptchaV2Class(br)) {
+                    /* New 2023-11-15 */
+                    final UrlQuery query = new UrlQuery();
+                    query.add("action", "check_recaptchac");
+                    query.add("file_id", internalFileID);
+                    final String reCaptchav2Response = new CaptchaHelperHostPluginRecaptchaV2(this, br).getToken();
+                    query.add("token", Encoding.urlEncode(reCaptchav2Response));
+                    ajax.postPage("/ajax.php", query);
+                    if (ajax.getRequest().getHtmlCode().equalsIgnoreCase("false")) {
+                        /* This should never happen! */
+                        throw new PluginException(LinkStatus.ERROR_CAPTCHA);
+                    }
+                } else {
+                    /* Old handling */
+                    final String code = getCaptchaCode("/imagecode.php?t=" + System.currentTimeMillis(), link);
+                    ajax.postPage("/ajax.php", "action=check_code&code=" + Encoding.urlEncode(code));
+                    if (ajax.getRequest().getHtmlCode().equalsIgnoreCase("false")) {
+                        throw new PluginException(LinkStatus.ERROR_CAPTCHA);
+                    }
+                    ajax.postPage("/ajax.php", "action=load_down_addr1&file_id=" + internalFileID);
+                }
             }
             String dllink = ajax.getRegex("true\\|<a href=\"([^<>\"]+)").getMatch(0);
             if (dllink == null) {
@@ -260,11 +280,11 @@ public class RosefileNet extends PluginForHost {
             throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
         } else if (br.containsHTML("(?i)Your IP address exceeds the number of downloads within the time limit")) {
             throw new PluginException(LinkStatus.ERROR_IP_BLOCKED, "Downloadlimit reached", 5 * 60 * 1000l);
-        } else if (dl.getConnection().getResponseCode() == 403) {
+        } else if (br.getHttpConnection().getResponseCode() == 403) {
             throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 403", 5 * 60 * 1000l);
-        } else if (dl.getConnection().getResponseCode() == 404) {
+        } else if (br.getHttpConnection().getResponseCode() == 404) {
             throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 404", 5 * 60 * 1000l);
-        } else if (dl.getConnection().getResponseCode() == 503) {
+        } else if (br.getHttpConnection().getResponseCode() == 503) {
             throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 503 too many connections", 5 * 60 * 1000l);
         } else {
             throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Unknown server error");
