@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.appwork.utils.StringUtils;
-import org.jdownloader.plugins.components.antiDDoSForHost;
 import org.jdownloader.plugins.controller.LazyPlugin;
 
 import jd.PluginWrapper;
@@ -32,11 +31,13 @@ import jd.plugins.DownloadLink;
 import jd.plugins.DownloadLink.AvailableStatus;
 import jd.plugins.HostPlugin;
 import jd.plugins.LinkStatus;
+import jd.plugins.Plugin;
 import jd.plugins.PluginException;
+import jd.plugins.PluginForHost;
 
-@HostPlugin(revision = "$Revision: 48454 $", interfaceVersion = 3, names = {}, urls = {})
-public class OncamMe extends antiDDoSForHost {
-    public OncamMe(PluginWrapper wrapper) {
+@HostPlugin(revision = "$Revision: 48458 $", interfaceVersion = 3, names = {}, urls = {})
+public class PornxpNet extends PluginForHost {
+    public PornxpNet(PluginWrapper wrapper) {
         super(wrapper);
     }
 
@@ -45,19 +46,17 @@ public class OncamMe extends antiDDoSForHost {
         return new LazyPlugin.FEATURE[] { LazyPlugin.FEATURE.XXX };
     }
 
-    /* DEV NOTES */
-    // Tags: Porn plugin
-    // other:
     /* Connection stuff */
-    private static final boolean free_resume       = true;
-    private static final int     free_maxchunks    = 0;
-    private static final int     free_maxdownloads = -1;
-    private String               dllink            = null;
+    private static final boolean free_resume                   = true;
+    private static final int     free_maxchunks                = 0;
+    private static final int     free_maxdownloads             = -1;
+    private String               dllink                        = null;
+    private final String         PROPERTY_TAGS_COMMA_SEPARATED = "tags_comma_separated";
 
     public static List<String[]> getPluginDomains() {
         final List<String[]> ret = new ArrayList<String[]>();
         // each entry in List<String[]> will result in one PluginForHost, Plugin.getHost() will return String[0]->main domain
-        ret.add(new String[] { "oncam.me" });
+        ret.add(new String[] { "pornxp.net", "pornxp.cc", "pornxp.org" });
         return ret;
     }
 
@@ -73,14 +72,14 @@ public class OncamMe extends antiDDoSForHost {
     public static String[] getAnnotationUrls() {
         final List<String> ret = new ArrayList<String>();
         for (final String[] domains : getPluginDomains()) {
-            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(embed/)?(\\d+)(/([a-z0-9\\-]+)/)?");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/videos/(\\d+)");
         }
         return ret.toArray(new String[0]);
     }
 
     @Override
     public String getAGBLink() {
-        return "https://oncam.me/static/terms-and-conditions/";
+        return "https://pornxp.org/legal/terms";
     }
 
     @Override
@@ -94,57 +93,84 @@ public class OncamMe extends antiDDoSForHost {
     }
 
     private String getFID(final DownloadLink link) {
-        return new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(1);
+        return new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0);
     }
 
     @Override
     public AvailableStatus requestFileInformation(final DownloadLink link) throws Exception {
-        return requestFileInformation(link, false);
-    }
-
-    private AvailableStatus requestFileInformation(final DownloadLink link, final boolean isDownload) throws Exception {
         dllink = null;
-        final String extDefault = ".mp4";
-        final String fid = this.getFID(link);
-        final String titleUrl = new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(3);
-        if (titleUrl != null) {
-            link.setFinalFileName(titleUrl.replace("-", " ").trim() + extDefault);
-        } else {
-            link.setFinalFileName(this.getFID(link) + ".mp4");
+        final String videoid = this.getFID(link);
+        if (!link.isNameSet()) {
+            link.setName(videoid + ".mp4");
         }
-        dllink = null;
         this.setBrowserExclusive();
         br.setFollowRedirects(true);
-        final boolean isEmbedURL = new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0) != null;
-        if (isEmbedURL) {
-            getPage("https://" + this.getHost() + "/" + fid + "/");
-        } else {
-            getPage(link.getPluginPatternMatcher());
-        }
+        br.getPage(link.getPluginPatternMatcher());
         if (br.getHttpConnection().getResponseCode() == 404) {
             throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
+        } else if (!this.canHandle(br.getURL()) && !br.getURL().contains(videoid)) {
+            /* E.g. redirect to mainpage */
+            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
         }
-        final String title = br.getRegex("<h1 class=\"content-title\"[^>]*>([^<]+)</h1>").getMatch(0);
+        String title = br.getRegex("class=\"player_details\"[^>]*><h1>([^<]+)</h1>").getMatch(0);
         if (title != null) {
-            link.setFinalFileName(Encoding.htmlDecode(title).trim() + extDefault);
+            title = Encoding.htmlDecode(title);
+            title = title.trim();
+            link.setFinalFileName(title + ".mp4");
         }
-        String jsStr = br.getRegex("var f = \\[([^\\]]+)\\]").getMatch(0);
-        jsStr = jsStr.replace("'", "");
-        final String[] params = jsStr.split(",");
-        /* 2022-01-10: This URL is only valid once so don't check it in download mode. */
-        this.dllink = "/filev.php?id=" + params[0] + "&file_id=" + params[1] + "&server=" + params[2] + "&hash=" + params[3] + "&expire=" + params[4] + "&file=" + params[5];
-        if (!StringUtils.isEmpty(dllink) && !isDownload) {
-            URLConnectionAdapter con = null;
-            try {
-                con = openAntiDDoSRequestConnection(br, br.createHeadRequest(dllink));
-                handleConnectionErrors(br, con);
-                if (con.getCompleteContentLength() > 0) {
-                    link.setVerifiedFileSize(con.getCompleteContentLength());
+        final String tagsHTML = br.getRegex("class=\"tags\">(.*?)</a> </div></div>").getMatch(0);
+        if (tagsHTML != null) {
+            final String[] tags = new Regex(tagsHTML, "/tags/([^\"]+)").getColumn(0);
+            if (tags != null && tags.length > 0) {
+                final StringBuilder tagsCommaSeparated = new StringBuilder();
+                for (final String tag : tags) {
+                    if (tagsCommaSeparated.length() > 0) {
+                        tagsCommaSeparated.append(",");
+                    }
+                    tagsCommaSeparated.append(Encoding.htmlDecode(tag));
                 }
-            } finally {
+                logger.info("tagsCommaSeparated[" + tags.length + "] = " + tagsCommaSeparated);
+                link.setProperty(PROPERTY_TAGS_COMMA_SEPARATED, tagsCommaSeparated.toString());
+            } else {
+                logger.warning("Failed to find tags");
+            }
+        } else {
+            logger.warning("Failed to find tagsHTML");
+        }
+        /* Find highest quality */
+        final String[] qualityurls = br.getRegex("<source src=\"([^\"]+)\"[^>]*type=\"video/mp4\"").getColumn(0);
+        if (qualityurls != null && qualityurls.length > 0) {
+            int maxHeight = -1;
+            for (final String qualityurl : qualityurls) {
+                final String qualityheightStr = new Regex(qualityurl, "(\\d+)\\.mp4$").getMatch(0);
+                if (qualityheightStr != null) {
+                    final int thisQualityHeight = Integer.parseInt(qualityheightStr);
+                    if (thisQualityHeight > maxHeight) {
+                        maxHeight = thisQualityHeight;
+                        dllink = qualityurl;
+                    }
+                }
+                if (this.dllink == null) {
+                    dllink = qualityurl;
+                }
+            }
+            if (!StringUtils.isEmpty(dllink)) {
+                URLConnectionAdapter con = null;
                 try {
-                    con.disconnect();
-                } catch (final Throwable e) {
+                    con = br.openHeadConnection(this.dllink);
+                    handleConnectionErrors(br, con);
+                    if (con.getCompleteContentLength() > 0) {
+                        link.setVerifiedFileSize(con.getCompleteContentLength());
+                    }
+                    final String ext = Plugin.getExtensionFromMimeTypeStatic(con.getContentType());
+                    if (ext != null && title != null) {
+                        link.setFinalFileName(this.correctOrApplyFileNameExtension(title, "." + ext));
+                    }
+                } finally {
+                    try {
+                        con.disconnect();
+                    } catch (final Throwable e) {
+                    }
                 }
             }
         }
@@ -153,11 +179,11 @@ public class OncamMe extends antiDDoSForHost {
 
     @Override
     public void handleFree(final DownloadLink link) throws Exception {
-        requestFileInformation(link, true);
+        requestFileInformation(link);
         if (StringUtils.isEmpty(dllink)) {
             throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
         }
-        dl = jd.plugins.BrowserAdapter.openDownload(br, link, dllink, free_resume, free_maxchunks);
+        dl = jd.plugins.BrowserAdapter.openDownload(this.br, link, dllink, free_resume, free_maxchunks);
         handleConnectionErrors(br, dl.getConnection());
         dl.startDownload();
     }

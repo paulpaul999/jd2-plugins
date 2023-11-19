@@ -111,7 +111,7 @@ import jd.plugins.components.UserAgents.BrowserName;
 import jd.plugins.hoster.YoutubeDashV2;
 import jd.utils.locale.JDL;
 
-@DecrypterPlugin(revision = "$Revision: 48331 $", interfaceVersion = 3, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48481 $", interfaceVersion = 3, names = {}, urls = {})
 public class TbCmV2 extends PluginForDecrypt {
     private static final int DDOS_WAIT_MAX        = Application.isJared(null) ? 1000 : 10;
     private static final int DDOS_INCREASE_FACTOR = 15;
@@ -489,20 +489,47 @@ public class TbCmV2 extends PluginForDecrypt {
         FilePackage channelOrPlaylistPackage = null;
         String singleVideoPackageNamePatternOverride = null;
         if (videoIdsToAdd.isEmpty()) {
-            /* Channel/Playlist */
+            /* Channel/Profile/Playlist */
             if (userDefinedMaxPlaylistOrProfileItemsLimit == 0) {
                 /* This should never happen but it is a double-check left here on purpose. */
                 logger.info(playlistHandlingLogtextForUserDisabledCrawlerByLimitSetting);
                 return ret;
             }
-            try {
-                // TODO: Clean this code mess
-                if (!isChannelOrProfileShorts(cleanedurl) && !StringUtils.isEmpty(userName) && StringUtils.isEmpty(playlistID) && cfg.getProfileCrawlMode() == ProfileCrawlMode.PLAYLIST) {
-                    /*
-                     * the user channel parser only parses 1050 videos. this workaround finds the user channel playlist and parses this
-                     * playlist instead
-                     */
-                    logger.info("Trying to find playlistID for profile-playlist 'Uploads by " + userName + "'");
+            final Regex legacyurl = new Regex(cleanedurl, "(?i)https?://[^/]+/user/([^/]+).*");
+            if (legacyurl.patternFind()) {
+                /* Workaround / legacy handling for such old URLs. */
+                // TODO: Maybe add check/errorhandling for offline/invalid channels
+                /*
+                 * Such old URLs can redirect to other usernames e.g. /user/nameOld -> Redirects to '/@nameNew/videos' while we can't just
+                 * call '/@nameOld/videos'
+                 */
+                logger.info("Checking for changed username | Currently known username: " + this.userName);
+                helper.getPage(br, cleanedurl);
+                helper.parse();
+                final Map<String, Object> root = helper.getYtInitialData();
+                final Map<String, Object> channelMetadataRenderer = (Map<String, Object>) JavaScriptEngineFactory.walkJson(root, "metadata/channelMetadataRenderer");
+                final String vanityChannelUrl = channelMetadataRenderer.get("vanityChannelUrl").toString();
+                final String confirmedRealUsername = new Regex(vanityChannelUrl, "@([^/]+)").getMatch(0);
+                if (confirmedRealUsername == null) {
+                    throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+                }
+                if (confirmedRealUsername.equals(this.userName)) {
+                    logger.info("Username has not changed and remains: " + this.userName);
+                } else {
+                    logger.info("Username has changed! Old: " + this.userName + " | New: " + confirmedRealUsername);
+                    this.userName = confirmedRealUsername;
+                }
+                /* Grab additional information now that we've already opened the page. */
+                this.channelID = channelMetadataRenderer.get("externalId").toString();
+            }
+            if (!isChannelOrProfileShorts(cleanedurl) && !StringUtils.isEmpty(userName) && StringUtils.isEmpty(playlistID) && cfg.getProfileCrawlMode() == ProfileCrawlMode.PLAYLIST) {
+                /*
+                 * the user channel parser only parses 1050 videos. this workaround finds the user channel playlist and parses this playlist
+                 * instead
+                 */
+                logger.info("Trying to find playlistID for profile-playlist 'Uploads by " + userName + "'");
+                if (channelID == null) {
+                    logger.info("Trying to find channelID");
                     helper.getPage(br, "https://www.youtube.com/@" + userName + "/featured");
                     helper.parse();
                     // channel title isn't user_name. user_name is /user/ reference. check logic in YoutubeHelper.extractData()!
@@ -517,95 +544,92 @@ public class TbCmV2 extends PluginForDecrypt {
                         logger.info("Unable to find playlistID -> Crawler is broken or profile does not exist");
                         throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
                     }
-                    globalPropertiesForDownloadLink.put(YoutubeHelper.YT_CHANNEL_ID, channelID);
-                    /* channelID starts with "UC". We can build channel-playlist out of channel-ID. */
+                }
+                /* channelID starts with "UC". We can build channel-playlist out of channel-ID. */
+                playlistID = "UU" + channelID.substring(2);
+            } else if (!isChannelOrProfileShorts(cleanedurl) && StringUtils.isEmpty(playlistID) && !StringUtils.isEmpty(channelID) && cfg.getProfileCrawlMode() == ProfileCrawlMode.PLAYLIST) {
+                /*
+                 * you can not use this with /c or /channel based urls, it will pick up false positives. see
+                 * https://www.youtube.com/channel/UCOSGEokQQcdAVFuL_Aq8dlg, it will find list=PLc-T0ryHZ5U_FtsfHQopuvQugBvRoVR3j which only
+                 * contains 27 videos not the entire channels 112
+                 */
+                logger.info("Trying to find playlistID for channel-playlist 'Uploads by " + channelID + "'");
+                helper.getPage(br, getBaseURL() + "/channel/" + channelID);
+                playlistID = br.getRegex("(?i)list=([A-Za-z0-9\\-_]+)\"[^<>]+play-all-icon-btn").getMatch(0);
+                if (StringUtils.isEmpty(playlistID) && channelID.startsWith("UC")) {
+                    /* channel has no play all button. */
                     playlistID = "UU" + channelID.substring(2);
                 }
-                if (!isChannelOrProfileShorts(cleanedurl) && StringUtils.isEmpty(playlistID) && !StringUtils.isEmpty(channelID) && cfg.getProfileCrawlMode() == ProfileCrawlMode.PLAYLIST) {
-                    /*
-                     * you can not use this with /c or /channel based urls, it will pick up false positives. see
-                     * https://www.youtube.com/channel/UCOSGEokQQcdAVFuL_Aq8dlg, it will find list=PLc-T0ryHZ5U_FtsfHQopuvQugBvRoVR3j which
-                     * only contains 27 videos not the entire channels 112
-                     */
-                    logger.info("Trying to find playlistID for channel-playlist 'Uploads by " + channelID + "'");
-                    helper.getPage(br, getBaseURL() + "/channel/" + channelID);
-                    playlistID = br.getRegex("(?i)list=([A-Za-z0-9\\-_]+)\"[^<>]+play-all-icon-btn").getMatch(0);
-                    if (StringUtils.isEmpty(playlistID) && channelID.startsWith("UC")) {
-                        /* channel has no play all button. */
-                        playlistID = "UU" + channelID.substring(2);
-                    }
-                    if (playlistID == null) {
-                        logger.info("Unable to find playlistID -> Crawler is broken or profile does not exist");
-                        throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
-                    }
+                if (playlistID == null) {
+                    logger.info("Unable to find playlistID -> Crawler is broken or profile does not exist");
+                    throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
                 }
-                final ArrayList<YoutubeClipData> playlist = crawlPlaylistOrChannel(helper, br, playlistID, userName, channelID, cleanedurl, userDefinedMaxPlaylistOrProfileItemsLimit);
-                if (playlist != null && playlist.size() > 0) {
-                    videoIdsToAdd.addAll(playlist);
-                    final ChannelPlaylistCrawlerPackagingMode mode = cfg.getChannelPlaylistCrawlerPackagingMode();
-                    if (mode == ChannelPlaylistCrawlerPackagingMode.AUTO || mode == ChannelPlaylistCrawlerPackagingMode.GROUP_ALL_VIDEOS_AS_SINGLE_PACKAGE) {
-                        String channelOrPlaylistPackageNamePattern;
-                        if (this.playlistID != null) {
-                            channelOrPlaylistPackageNamePattern = cfg.getPackagePatternForPlaylists();
-                        } else {
-                            channelOrPlaylistPackageNamePattern = cfg.getPackagePatternForChannels();
+            }
+            if (channelID != null) {
+                globalPropertiesForDownloadLink.put(YoutubeHelper.YT_CHANNEL_ID, channelID);
+            }
+            final ArrayList<YoutubeClipData> playlist = crawlPlaylistOrChannel(helper, br, playlistID, userName, channelID, cleanedurl, userDefinedMaxPlaylistOrProfileItemsLimit);
+            if (playlist != null && playlist.size() > 0) {
+                videoIdsToAdd.addAll(playlist);
+                final ChannelPlaylistCrawlerPackagingMode mode = cfg.getChannelPlaylistCrawlerPackagingMode();
+                if (mode == ChannelPlaylistCrawlerPackagingMode.AUTO || mode == ChannelPlaylistCrawlerPackagingMode.GROUP_ALL_VIDEOS_AS_SINGLE_PACKAGE) {
+                    String channelOrPlaylistPackageNamePattern;
+                    if (this.playlistID != null) {
+                        channelOrPlaylistPackageNamePattern = cfg.getPackagePatternForPlaylists();
+                    } else {
+                        channelOrPlaylistPackageNamePattern = cfg.getPackagePatternForChannels();
+                    }
+                    if (DebugMode.TRUE_IN_IDE_ELSE_FALSE) {
+                        /* Dev only: Include number of expected items in packagename for better overview/debugging. */
+                        channelOrPlaylistPackageNamePattern = "[" + videoIdsToAdd.size() + " videos] " + channelOrPlaylistPackageNamePattern;
+                    }
+                    if (mode == ChannelPlaylistCrawlerPackagingMode.AUTO && YoutubeHelper.namePatternContainsSingleVideoSpecificEntries(channelOrPlaylistPackageNamePattern)) {
+                        logger.info("User put video-specific replacement patterns into channel/playlist package name pattern in auto mode -> Using that pattern as single video pattern instead: " + channelOrPlaylistPackageNamePattern);
+                        singleVideoPackageNamePatternOverride = channelOrPlaylistPackageNamePattern;
+                    } else {
+                        channelOrPlaylistPackage = FilePackage.getInstance();
+                        channelOrPlaylistPackage.setAllowMerge(true);
+                        final DownloadLink dummy = this.createDownloadlink("ytdummy");
+                        dummy.setProperties(globalPropertiesForDownloadLink);
+                        String formattedPackagename = channelOrPlaylistPackageNamePattern;
+                        for (YoutubeReplacer r : YoutubeHelper.REPLACER) {
+                            formattedPackagename = r.replace(formattedPackagename, this.helper, dummy);
                         }
-                        if (DebugMode.TRUE_IN_IDE_ELSE_FALSE) {
-                            /* Dev only: Include number of expected items in packagename for better overview/debugging. */
-                            channelOrPlaylistPackageNamePattern = "[" + videoIdsToAdd.size() + " videos] " + channelOrPlaylistPackageNamePattern;
-                        }
-                        if (mode == ChannelPlaylistCrawlerPackagingMode.AUTO && YoutubeHelper.namePatternContainsSingleVideoSpecificEntries(channelOrPlaylistPackageNamePattern)) {
-                            logger.info("User put video-specific replacement patterns into channel/playlist package name pattern in auto mode -> Using that pattern as single video pattern instead: " + channelOrPlaylistPackageNamePattern);
-                            singleVideoPackageNamePatternOverride = channelOrPlaylistPackageNamePattern;
+                        if (!StringUtils.isEmpty(formattedPackagename)) {
+                            channelOrPlaylistPackage.setName(formattedPackagename);
                         } else {
-                            channelOrPlaylistPackage = FilePackage.getInstance();
-                            channelOrPlaylistPackage.setAllowMerge(true);
-                            final DownloadLink dummy = this.createDownloadlink("ytdummy");
-                            dummy.setProperties(globalPropertiesForDownloadLink);
-                            String formattedPackagename = channelOrPlaylistPackageNamePattern;
-                            for (YoutubeReplacer r : YoutubeHelper.REPLACER) {
-                                formattedPackagename = r.replace(formattedPackagename, this.helper, dummy);
-                            }
-                            if (!StringUtils.isEmpty(formattedPackagename)) {
-                                channelOrPlaylistPackage.setName(formattedPackagename);
+                            /* Fallback */
+                            logger.info("Invalid result of formattedPackagename -> Fallback to defaults");
+                            final String playlistTitle = (String) globalPropertiesForDownloadLink.get(YoutubeHelper.YT_PLAYLIST_TITLE);
+                            final String channelName = (String) globalPropertiesForDownloadLink.get(YoutubeHelper.YT_CHANNEL_TITLE);
+                            if (playlistTitle != null) {
+                                channelOrPlaylistPackage.setName(playlistTitle);
                             } else {
-                                /* Fallback */
-                                logger.info("Invalid result of formattedPackagename -> Fallback to defaults");
-                                final String playlistTitle = (String) globalPropertiesForDownloadLink.get(YoutubeHelper.YT_PLAYLIST_TITLE);
-                                final String channelName = (String) globalPropertiesForDownloadLink.get(YoutubeHelper.YT_CHANNEL_TITLE);
-                                if (playlistTitle != null) {
-                                    channelOrPlaylistPackage.setName(playlistTitle);
+                                final String internalContainerURL = helper.getChannelPlaylistCrawlerContainerUrlOverride(param.getCryptedUrl());
+                                final boolean isShorts = isChannelOrProfileShorts(internalContainerURL);
+                                String packagename;
+                                if (channelName != null) {
+                                    packagename = channelName;
+                                } else if (this.userName != null) {
+                                    packagename = this.userName;
                                 } else {
-                                    final String internalContainerURL = helper.getChannelPlaylistCrawlerContainerUrlOverride(param.getCryptedUrl());
-                                    final boolean isShorts = isChannelOrProfileShorts(internalContainerURL);
-                                    String packagename;
-                                    if (channelName != null) {
-                                        packagename = channelName;
-                                    } else if (this.userName != null) {
-                                        packagename = this.userName;
-                                    } else {
-                                        packagename = playlistHandlingHumanReadableTitle;
-                                    }
-                                    if (isShorts) {
-                                        packagename += " | Shorts";
-                                    }
-                                    channelOrPlaylistPackage.setName(packagename);
+                                    packagename = playlistHandlingHumanReadableTitle;
                                 }
-                            }
-                            final String playlistDescription = (String) globalPropertiesForDownloadLink.get(YoutubeHelper.YT_PLAYLIST_DESCRIPTION);
-                            if (playlistDescription != null) {
-                                channelOrPlaylistPackage.setComment(playlistDescription);
+                                if (isShorts) {
+                                    packagename += " | Shorts";
+                                }
+                                channelOrPlaylistPackage.setName(packagename);
                             }
                         }
+                        final String playlistDescription = (String) globalPropertiesForDownloadLink.get(YoutubeHelper.YT_PLAYLIST_DESCRIPTION);
+                        if (playlistDescription != null) {
+                            channelOrPlaylistPackage.setComment(playlistDescription);
+                        }
                     }
-                } else {
-                    // TODO: Check if this is still needed
-                    videoIdsToAdd.addAll(parseVideoIds(video_ids_comma_separated));
                 }
-            } catch (final InterruptedException e) {
-                logger.log(e);
-                logger.warning("Playlist crawler failed due to exception");
-                return ret;
+            } else {
+                // TODO: Check if this is still needed
+                videoIdsToAdd.addAll(parseVideoIds(video_ids_comma_separated));
             }
         }
         Integer indexFromAddedURL = null;
@@ -1195,30 +1219,36 @@ public class TbCmV2 extends PluginForDecrypt {
             }
             helper.parse();
             rootMap = helper.getYtInitialData();
-            final List<String> availableChannelTabs = new ArrayList<String>();
-            Map<String, Object> playlisttab = null;
-            Map<String, Object> shortstab = null;
-            Map<String, Object> videostab = null;
             ytConfigData = (Map<String, Object>) JavaScriptEngineFactory.walkJson(rootMap, "responseContext/webResponseContextExtensionData/ytConfigData");
             String videosCountText = null;
             final Map<String, Object> autoGeneratexYoutubeMixPlaylistProbe = (Map<String, Object>) JavaScriptEngineFactory.walkJson(rootMap, "contents/twoColumnWatchNextResults/playlist/playlist");
             if (autoGeneratexYoutubeMixPlaylistProbe != null && Boolean.TRUE.equals(autoGeneratexYoutubeMixPlaylistProbe.get("isInfinite"))) {
+                /* Auto generated "youtube mix" playlist */
                 globalPropertiesForDownloadLink.put(YoutubeHelper.YT_PLAYLIST_TITLE, autoGeneratexYoutubeMixPlaylistProbe.get("title").toString());
                 varray = (List<Map<String, Object>>) autoGeneratexYoutubeMixPlaylistProbe.get("contents");
                 /* Such playlists can contain an infinite amount of items -> Stop after first page */
                 abortPaginationAfterFirstPage = true;
-            } else {
+            } else if (run == 0) {
+                /* Channel */
+                final List<String> availableChannelTabs = new ArrayList<String>();
+                Map<String, Object> playlisttab = null;
+                Map<String, Object> shortstab = null;
+                Map<String, Object> videostab = null;
                 final List<Map<String, Object>> tabs = (List<Map<String, Object>>) JavaScriptEngineFactory.walkJson(rootMap, "contents/twoColumnBrowseResultsRenderer/tabs");
                 if (tabs != null) {
                     for (final Map<String, Object> tab : tabs) {
                         /* We will get this one if a real playlist is our currently opened tab. */
                         final Map<String, Object> tabRenderer = (Map<String, Object>) tab.get("tabRenderer");
                         final Object varrayPlaylistProbe = JavaScriptEngineFactory.walkJson(tabRenderer, "content/sectionListRenderer/contents/{}/itemSectionRenderer/contents/{}/playlistVideoListRenderer/contents");
+                        final Object varrayChannelShortsPlaylist = JavaScriptEngineFactory.walkJson(tabRenderer, "content/sectionListRenderer/contents/{}/itemSectionRenderer/contents/{}/richGridRenderer/contents");
                         if (varrayPlaylistProbe != null) {
                             /* Real playlist */
                             playlisttab = tab;
                             varray = (List<Map<String, Object>>) varrayPlaylistProbe;
                             break;
+                        } else if (varrayChannelShortsPlaylist != null) {
+                            /* Channel playlist when channel only contains shorts */
+                            varray = (List<Map<String, Object>>) varrayChannelShortsPlaylist;
                         } else if (tabRenderer != null) {
                             /* Channel/User */
                             final String tabTitle = (String) tabRenderer.get("title");
@@ -1245,7 +1275,7 @@ public class TbCmV2 extends PluginForDecrypt {
                     logger.info("Available channel tabs: " + availableChannelTabs);
                     final boolean isChannelOrProfileShorts = isChannelOrProfileShorts(referenceUrl);
                     if (shortstab == null && isChannelOrProfileShorts && videostab != null && run == 0) {
-                        logger.info("User wanted shorts but channel doesn't contain shorts tab -> Fallback to Videos tab");
+                        logger.info("User wanted shorts but channel doesn't contain shorts tab -> Fallback to Videos tab and re-do loop with that URL");
                         if (channelID != null) {
                             userOrPlaylistURL = getChannelURLOLD(userName, "videos");
                             desiredChannelTab = "Videos";
@@ -1256,7 +1286,7 @@ public class TbCmV2 extends PluginForDecrypt {
                         }
                         continue;
                     } else if (videostab == null && shortstab != null && !isChannelOrProfileShorts && run == 0) {
-                        logger.info("User wanted videos but channel doesn't contain videos tab -> Fallback to shorts tab");
+                        logger.info("User wanted videos but channel doesn't contain videos tab -> Fallback to shorts tab and re-do loop with that URL");
                         if (channelID != null) {
                             userOrPlaylistURL = getChannelURLOLD(userName, "shorts");
                             desiredChannelTab = "Shorts";
@@ -1267,6 +1297,8 @@ public class TbCmV2 extends PluginForDecrypt {
                         }
                         continue;
                     }
+                } else {
+                    logger.warning("Failed to find any tabs");
                 }
             }
             /**

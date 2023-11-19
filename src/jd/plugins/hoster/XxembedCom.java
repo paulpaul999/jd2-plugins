@@ -21,15 +21,14 @@ import java.util.List;
 import org.jdownloader.plugins.components.XFileSharingProBasic;
 
 import jd.PluginWrapper;
-import jd.http.Browser;
 import jd.plugins.Account;
 import jd.plugins.Account.AccountType;
 import jd.plugins.DownloadLink;
 import jd.plugins.HostPlugin;
 
-@HostPlugin(revision = "$Revision: 48469 $", interfaceVersion = 3, names = {}, urls = {})
-public class StreamwishCom extends XFileSharingProBasic {
-    public StreamwishCom(final PluginWrapper wrapper) {
+@HostPlugin(revision = "$Revision: 48457 $", interfaceVersion = 3, names = {}, urls = {})
+public class XxembedCom extends XFileSharingProBasic {
+    public XxembedCom(final PluginWrapper wrapper) {
         super(wrapper);
         this.enablePremium(super.getPurchasePremiumURL());
     }
@@ -44,7 +43,7 @@ public class StreamwishCom extends XFileSharingProBasic {
     public static List<String[]> getPluginDomains() {
         final List<String[]> ret = new ArrayList<String[]>();
         // each entry in List<String[]> will result in one PluginForHost, Plugin.getHost() will return String[0]->main domain
-        ret.add(new String[] { "streamwish.com", "streamwish.to", "awish.pro", "embedwish.com", "wishembed.pro", "vidcloud.top" });
+        ret.add(new String[] { "xxembed.com" });
         return ret;
     }
 
@@ -104,60 +103,5 @@ public class StreamwishCom extends XFileSharingProBasic {
     @Override
     public int getMaxSimultanPremiumDownloadNum() {
         return -1;
-    }
-
-    @Override
-    protected boolean supports_availablecheck_filesize_html() {
-        /* 2023-09-06 */
-        return false;
-    }
-
-    @Override
-    public String[] scanInfo(final String html, final String[] fileInfo) {
-        super.scanInfo(html, fileInfo);
-        final String betterFilename = br.getRegex("<h1 class=\"h5 mb-3\">([^<]+)</h1>").getMatch(0);
-        if (betterFilename != null) {
-            fileInfo[0] = betterFilename;
-        }
-        /**
-         * Small workarounds for "sharebox2" regex in upper code which needs to be improved. </br>
-         * It can catch wrong information.
-         */
-        fileInfo[1] = null;
-        return fileInfo;
-    }
-
-    @Override
-    protected String buildURLPath(final DownloadLink link, final String fuid, final URL_TYPE type) {
-        if (type == URL_TYPE.OFFICIAL_VIDEO_DOWNLOAD) {
-            /* 2023-09-07: Special: They do not have working "/d/..." links anymore but users are still spreading them. */
-            return buildNormalURLPath(link, fuid);
-        } else {
-            return super.buildURLPath(link, fuid, type);
-        }
-    }
-
-    @Override
-    protected boolean supportsShortURLs() {
-        return false;
-    }
-
-    @Override
-    protected boolean supports_availablecheck_alt() {
-        return false;
-    }
-
-    @Override
-    protected boolean supports_availablecheck_filename_abuse() {
-        return false;
-    }
-
-    @Override
-    protected boolean isOffline(final DownloadLink link, final Browser br, final String correctedBR) {
-        if (br.containsHTML("<div>\\s*This video has been locked watch or does not exist")) {
-            return true;
-        } else {
-            return super.isOffline(link, br, correctedBR);
-        }
     }
 }

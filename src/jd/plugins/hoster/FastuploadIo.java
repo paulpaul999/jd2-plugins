@@ -22,10 +22,11 @@ import java.util.Map;
 
 import org.appwork.storage.TypeRef;
 import org.appwork.utils.StringUtils;
+import org.appwork.utils.formatter.SizeFormatter;
 
 import jd.PluginWrapper;
 import jd.http.Browser;
-import jd.http.URLConnectionAdapter;
+import jd.nutils.encoding.Encoding;
 import jd.parser.Regex;
 import jd.plugins.DownloadLink;
 import jd.plugins.DownloadLink.AvailableStatus;
@@ -34,9 +35,9 @@ import jd.plugins.LinkStatus;
 import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 
-@HostPlugin(revision = "$Revision: 48455 $", interfaceVersion = 3, names = {}, urls = {})
-public class LinkboxTo extends PluginForHost {
-    public LinkboxTo(PluginWrapper wrapper) {
+@HostPlugin(revision = "$Revision: 48481 $", interfaceVersion = 3, names = {}, urls = {})
+public class FastuploadIo extends PluginForHost {
+    public FastuploadIo(PluginWrapper wrapper) {
         super(wrapper);
         // this.enablePremium("");
     }
@@ -50,20 +51,14 @@ public class LinkboxTo extends PluginForHost {
 
     @Override
     public String getAGBLink() {
-        return "https://www.sharezweb.com/terms-of-service";
+        return "https://fastupload.io/";
     }
 
-    public static List<String[]> getPluginDomains() {
+    private static List<String[]> getPluginDomains() {
         final List<String[]> ret = new ArrayList<String[]>();
         // each entry in List<String[]> will result in one PluginForHost, Plugin.getHost() will return String[0]->main domain
-        ret.add(new String[] { "linkbox.to", "sharezweb.com" });
+        ret.add(new String[] { "fastupload.io" });
         return ret;
-    }
-
-    @Override
-    public String rewriteHost(final String host) {
-        /* 2023-05-10: Main domain has changed from sharezweb.com to linkbox.to. */
-        return this.rewriteHost(getPluginDomains(), host);
     }
 
     public static String[] getAnnotationNames() {
@@ -78,16 +73,15 @@ public class LinkboxTo extends PluginForHost {
     public static String[] getAnnotationUrls() {
         final List<String> ret = new ArrayList<String>();
         for (final String[] domains : getPluginDomains()) {
-            ret.add("https?://(?:(?:www|[a-z]{2})\\.)?" + buildHostsPatternPart(domains) + "/file/([a-z0-9]+)");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:[a-z]{2}/)?([A-Za-z0-9]+)/file");
         }
         return ret.toArray(new String[0]);
     }
 
     /* Connection stuff */
-    private final boolean      FREE_RESUME             = true;
-    private final int          FREE_MAXCHUNKS          = 0;
-    private final int          FREE_MAXDOWNLOADS       = -1;
-    public static final String PROPERTY_FREE_DIRECTURL = "free_directlink";
+    private final boolean FREE_RESUME       = true;
+    private final int     FREE_MAXCHUNKS    = 0;
+    private final int     FREE_MAXDOWNLOADS = -1;
 
     // private final boolean ACCOUNT_FREE_RESUME = true;
     // private final int ACCOUNT_FREE_MAXCHUNKS = 0;
@@ -111,78 +105,62 @@ public class LinkboxTo extends PluginForHost {
 
     @Override
     public AvailableStatus requestFileInformation(final DownloadLink link) throws IOException, PluginException {
-        final String fid = this.getFID(link);
         if (!link.isNameSet()) {
             /* Fallback */
             link.setName(this.getFID(link));
         }
         this.setBrowserExclusive();
-        br.getPage("https://www." + this.getHost() + "/api/file/detail?itemId=" + fid + "&needUser=1&needTpInfo=1&token=");
+        br.setFollowRedirects(true);
+        br.getPage(link.getPluginPatternMatcher());
         if (br.getHttpConnection().getResponseCode() == 404) {
             throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
         }
-        final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
-        final Map<String, Object> data = (Map<String, Object>) entries.get("data");
-        /* E.g. when invalid fileID is used: {"data":null,"status":1} */
-        if (data == null) {
-            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
+        String filename = br.getRegex("class=\"filebox-title mb-1\"[^>]*>([^<]+)</p>").getMatch(0);
+        String filesize = br.getRegex("Descarregar \\((\\d+[^\"]+)\\)\";").getMatch(0);
+        if (filename != null) {
+            filename = Encoding.htmlDecode(filename).trim();
+            link.setName(filename);
         }
-        final Map<String, Object> itemInfo = (Map<String, Object>) data.get("itemInfo");
-        parseFileInfoAndSetFilename(link, itemInfo);
+        if (filesize != null) {
+            link.setDownloadSize(SizeFormatter.getSize(filesize));
+        }
         return AvailableStatus.TRUE;
-    }
-
-    public static void parseFileInfoAndSetFilename(final DownloadLink link, final Map<String, Object> ressource) {
-        link.setVerifiedFileSize(((Number) ressource.get("size")).longValue());
-        link.setFinalFileName(ressource.get("name").toString());
-        link.setProperty(PROPERTY_FREE_DIRECTURL, ressource.get("url"));
-        link.setAvailable(true);
     }
 
     @Override
     public void handleFree(final DownloadLink link) throws Exception, PluginException {
-        handleDownload(link, FREE_RESUME, FREE_MAXCHUNKS, PROPERTY_FREE_DIRECTURL);
+        handleDownload(link, FREE_RESUME, FREE_MAXCHUNKS, "free_directlink");
     }
 
     private void handleDownload(final DownloadLink link, final boolean resumable, final int maxchunks, final String directlinkproperty) throws Exception, PluginException {
         if (!attemptStoredDownloadurlDownload(link, directlinkproperty)) {
             requestFileInformation(link);
-            final String dllink = link.getStringProperty(directlinkproperty);
-            if (StringUtils.isEmpty(dllink)) {
-                logger.warning("Failed to find final downloadurl");
-                throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+            final String csrftoken = br.getRegex("name=\"csrf-token\" content=\"([^\"]+)\"").getMatch(0);
+            if (csrftoken != null) {
+                br.getHeaders().put("X-Csrf-Token", csrftoken);
+            } else {
+                logger.warning("Failed to find csrftoken");
             }
-            dl = jd.plugins.BrowserAdapter.openDownload(br, link, dllink, resumable, maxchunks);
+            br.postPage("/" + this.getFID(link) + "/download/create", "");
+            final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
+            final String directurl = entries.get("download_link").toString();
+            dl = jd.plugins.BrowserAdapter.openDownload(br, link, directurl, resumable, maxchunks);
             if (!this.looksLikeDownloadableContent(dl.getConnection())) {
                 br.followConnection(true);
-                if (dl.getConnection().getCompleteContentLength() == 0) {
-                    throw new PluginException(LinkStatus.ERROR_FATAL, "Corrupt or empty file");
-                } else if (dl.getConnection().getResponseCode() == 403) {
+                if (dl.getConnection().getResponseCode() == 403) {
                     throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 403", 5 * 60 * 1000l);
                 } else if (dl.getConnection().getResponseCode() == 404) {
                     throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 404", 5 * 60 * 1000l);
-                } else {
-                    /* 2023-11-13: API does not necessarily report abused files as offline. */
-                    throw new PluginException(LinkStatus.ERROR_FATAL, "File offline or broken");
                 }
+                throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
             }
-            preDownloadErrorCheck(dl.getConnection());
-            link.setProperty(directlinkproperty, dl.getConnection().getURL().toString());
+            link.setProperty(directlinkproperty, dl.getConnection().getURL().toExternalForm());
         }
         dl.startDownload();
     }
 
-    private void preDownloadErrorCheck(final URLConnectionAdapter con) throws PluginException {
-        final String etag = con.getRequest().getResponseHeader("etag");
-        if (StringUtils.equalsIgnoreCase(etag, "\"28a14757bfe1522e447b544b7d7e5885\"")) {
-            /* 2023-11-13: Dummy video for abused video content. */
-            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
-        }
-    }
-
     @Override
     public boolean hasCaptcha(DownloadLink link, jd.plugins.Account acc) {
-        /* 2022-12-20: No captchas needed at all. */
         return false;
     }
 
@@ -195,14 +173,12 @@ public class LinkboxTo extends PluginForHost {
             final Browser brc = br.cloneBrowser();
             dl = new jd.plugins.BrowserAdapter().openDownload(brc, link, url, FREE_RESUME, FREE_MAXCHUNKS);
             if (this.looksLikeDownloadableContent(dl.getConnection())) {
-                preDownloadErrorCheck(dl.getConnection());
                 return true;
             } else {
                 brc.followConnection(true);
                 throw new IOException();
             }
         } catch (final Throwable e) {
-            link.removeProperty(directlinkproperty);
             logger.log(e);
             try {
                 dl.getConnection().disconnect();

@@ -23,7 +23,6 @@ import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 
 import org.appwork.storage.TypeRef;
-import org.appwork.utils.DebugMode;
 import org.appwork.utils.StringUtils;
 import org.appwork.utils.parser.UrlQuery;
 import org.jdownloader.scripting.JavaScriptEngineFactory;
@@ -42,7 +41,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForDecrypt;
 import jd.plugins.hoster.GenericM3u8;
 
-@DecrypterPlugin(revision = "$Revision: 48451 $", interfaceVersion = 3, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48455 $", interfaceVersion = 3, names = {}, urls = {})
 public class ImcontentMe extends PluginForDecrypt {
     public ImcontentMe(PluginWrapper wrapper) {
         super(wrapper);
@@ -104,10 +103,6 @@ public class ImcontentMe extends PluginForDecrypt {
             /* Developer mistake */
             throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
         }
-        if (!DebugMode.TRUE_IN_IDE_ELSE_FALSE) {
-            /* 2023-09-14: Plugin does not yet work. */
-            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
-        }
         br.setFollowRedirects(true);
         String referer = null;
         if (param.getDownloadLink() != null) {
@@ -135,7 +130,12 @@ public class ImcontentMe extends PluginForDecrypt {
         final String titleSlug = (String) entries.get("jid");
         final String cryptedData = (String) entries.get("data");
         if (StringUtils.isEmpty(cryptedData)) {
-            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+            if (entries.containsKey("error")) {
+                /* .g. {"status":true,"current_request":"CENSORED","error":{"code":500,"message":"Source is empty try restart"}} */
+                throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
+            } else {
+                throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+            }
         }
         final String title;
         final String betterTitle = param.getDownloadLink() != null ? param.getDownloadLink().getStringProperty(PROPERTY_TITLE) : null;
