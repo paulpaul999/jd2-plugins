@@ -19,12 +19,14 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.appwork.utils.Regex;
 
 import jd.PluginWrapper;
 import jd.controlling.AccountController;
 import jd.controlling.ProgressController;
+import jd.http.Browser;
 import jd.nutils.encoding.Encoding;
 import jd.plugins.Account;
 import jd.plugins.CryptedLink;
@@ -37,7 +39,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForDecrypt;
 import jd.plugins.hoster.RecurbateCom;
 
-@DecrypterPlugin(revision = "$Revision: 47997 $", interfaceVersion = 3, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48490 $", interfaceVersion = 3, names = {}, urls = {})
 @PluginDependencies(dependencies = { RecurbateCom.class })
 public class RecurbateComProfile extends PluginForDecrypt {
     public RecurbateComProfile(PluginWrapper wrapper) {
@@ -75,11 +77,17 @@ public class RecurbateComProfile extends PluginForDecrypt {
         /* Init hosterplugin so we're using the same browser (same headers/settings). */
         final RecurbateCom hosterplugin = (RecurbateCom) this.getNewPluginForHostInstance(this.getHost());
         final Account account = AccountController.getInstance().getValidAccount(this.getHost());
+        final List<String> deadDomains = hosterplugin.getDeadDomains();
+        String contenturl = param.getCryptedUrl();
+        final String hostFromURL = Browser.getHost(contenturl);
+        if (deadDomains.contains(hostFromURL)) {
+            contenturl = contenturl.replaceFirst(Pattern.quote(hostFromURL), this.getHost());
+        }
         if (account != null) {
             /* Login whenever possible. This is not needed to get the content but can help to get around Cloudflare. */
-            hosterplugin.login(account, param.getCryptedUrl(), true);
+            hosterplugin.login(account, contenturl, true);
         } else {
-            br.getPage(param.getCryptedUrl());
+            br.getPage(contenturl);
         }
         if (br.getHttpConnection().getResponseCode() == 404) {
             throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
@@ -97,21 +105,22 @@ public class RecurbateComProfile extends PluginForDecrypt {
             }
             boolean foundNewItemsOnCurrentPage = false;
             for (final String videoID : videoIDs) {
-                if (dupes.add(videoID)) {
-                    final String videoDetails = br.getRegex("play\\.php\\?video=" + videoID + ".*?(<div\\s*class\\s*=\\s*\"video-info-sub.*?</div>)").getMatch(0);
-                    foundNewItemsOnCurrentPage = true;
-                    final DownloadLink dl = createDownloadlink("https://" + this.getHost() + "/play.php?video=" + videoID);
-                    if (videoDetails != null) {
-                        final String dateStr = new Regex(videoDetails, "(?i)>\\s*•?\\s*(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2})").getMatch(0);
-                        RecurbateCom.setDate(dl, dateStr);
-                    }
-                    dl.setProperty(RecurbateCom.PROPERTY_USER, username);
-                    RecurbateCom.setFilename(dl, videoID);
-                    dl.setAvailable(true);
-                    dl._setFilePackage(fp);
-                    ret.add(dl);
-                    distribute(dl);
+                if (!dupes.add(videoID)) {
+                    continue;
                 }
+                final String videoDetails = br.getRegex("play\\.php\\?video=" + videoID + ".*?(<div\\s*class\\s*=\\s*\"video-info-sub.*?</div>)").getMatch(0);
+                foundNewItemsOnCurrentPage = true;
+                final DownloadLink dl = createDownloadlink("https://" + this.getHost() + "/play.php?video=" + videoID);
+                if (videoDetails != null) {
+                    final String dateStr = new Regex(videoDetails, "(?i)>\\s*•?\\s*(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2})").getMatch(0);
+                    RecurbateCom.setDate(dl, dateStr);
+                }
+                dl.setProperty(RecurbateCom.PROPERTY_USER, username);
+                RecurbateCom.setFilename(dl, videoID);
+                dl.setAvailable(true);
+                dl._setFilePackage(fp);
+                ret.add(dl);
+                distribute(dl);
             }
             logger.info("Crawled page " + page + " | Found items so far: " + ret.size());
             final String nextpage = br.getRegex("(/performer/[^/]+/page/" + (page + 1) + ")").getMatch(0);

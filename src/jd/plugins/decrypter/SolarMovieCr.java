@@ -30,7 +30,7 @@ import jd.plugins.LinkStatus;
 import jd.plugins.PluginException;
 import jd.plugins.PluginForDecrypt;
 
-@DecrypterPlugin(revision = "$Revision: 48480 $", interfaceVersion = 2, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48482 $", interfaceVersion = 2, names = {}, urls = {})
 public class SolarMovieCr extends PluginForDecrypt {
     public SolarMovieCr(PluginWrapper wrapper) {
         super(wrapper);
@@ -66,7 +66,7 @@ public class SolarMovieCr extends PluginForDecrypt {
     public static String[] buildAnnotationUrls(final List<String[]> pluginDomains) {
         final List<String> ret = new ArrayList<String>();
         for (final String[] domains : pluginDomains) {
-            ret.add("https?://(?:\\w+\\.)?" + buildHostsPatternPart(domains) + "/movie/[\\w-]+");
+            ret.add("https?://(?:\\w+\\.)?" + buildHostsPatternPart(domains) + "/movie/[\\w-]+-\\d+/?");
         }
         return ret.toArray(new String[0]);
     }
