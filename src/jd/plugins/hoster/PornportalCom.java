@@ -60,7 +60,7 @@ import jd.plugins.components.PluginJSonUtils;
 import jd.plugins.components.SiteType.SiteTemplate;
 import jd.plugins.decrypter.PornportalComCrawler;
 
-@HostPlugin(revision = "$Revision: 48451 $", interfaceVersion = 2, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48488 $", interfaceVersion = 2, names = {}, urls = {})
 public class PornportalCom extends PluginForHost {
     public PornportalCom(PluginWrapper wrapper) {
         super(wrapper);
@@ -287,7 +287,7 @@ public class PornportalCom extends PluginForHost {
     public static final String   PROPERTY_GALLERY_IMAGE_POSITION = "gallery_image_position";
     public static final String   PROPERTY_GALLERY_DIRECTORY      = "gallery_directory";
     public static final String   PROPERTY_GALLERY_SIZE           = "gallery_size";
-    public static Object         KEYLOCK                       = new Object();
+    public static Object         KEYLOCK                         = new Object();
 
     public static Request getPage(final Browser br, final Request request) throws Exception {
         br.getPage(request);
@@ -568,8 +568,7 @@ public class PornportalCom extends PluginForHost {
                     if (StringUtils.isEmpty(authApiUrl)) {
                         logger.warning("Failed to find api_base");
                         throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
-                    }
-                    if (!prepareBrAPI(this, brlogin, account, entries)) {
+                    } else if (!prepareBrAPI(this, brlogin, account, entries)) {
                         logger.warning("Failed to prepare API headers");
                         throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
                     }
@@ -607,6 +606,8 @@ public class PornportalCom extends PluginForHost {
                     final PostRequest postRequest = brlogin.createPostRequest(authApiUrl + "/v1/authenticate", JSonStorage.serializeToJson(logindata));
                     getPage(brlogin, postRequest);
                     if (brlogin.getHttpConnection().getResponseCode() == 401) {
+                        throw new AccountInvalidException();
+                    } else if (brlogin.getHttpConnection().getResponseCode() == 403) {
                         throw new AccountInvalidException();
                     }
                     final Map<String, Object> authinfo = restoreFromString(brlogin.getRequest().getHtmlCode(), TypeRef.MAP);

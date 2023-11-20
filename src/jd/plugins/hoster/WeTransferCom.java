@@ -35,7 +35,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 import jd.plugins.components.PluginJSonUtils;
 
-@HostPlugin(revision = "$Revision: 48424 $", interfaceVersion = 2, names = { "wetransfer.com", "boards.wetransfer.com" }, urls = { "https?://wetransferdecrypted/[a-f0-9]{46}/[a-f0-9]{4,12}/[a-f0-9]{46}", "https?://boards\\.wetransfer\\.com/board/[a-z0-9]+" })
+@HostPlugin(revision = "$Revision: 48488 $", interfaceVersion = 2, names = { "wetransfer.com", "boards.wetransfer.com" }, urls = { "https?://wetransferdecrypted/[a-f0-9]{46}/[a-f0-9]{4,12}/[a-f0-9]{46}", "https?://boards\\.wetransfer\\.com/board/[a-z0-9]+" })
 public class WeTransferCom extends PluginForHost {
     public WeTransferCom(final PluginWrapper wrapper) {
         super(wrapper);
@@ -54,6 +54,7 @@ public class WeTransferCom extends PluginForHost {
     public static Browser prepBRWebsite(final Browser br) {
         br.addAllowedResponseCodes(new int[] { 410, 503 });
         br.setCookie("wetransfer.com", "wt_tandc", "20170208");
+        br.setFollowRedirects(true);
         return br;
     }
 
