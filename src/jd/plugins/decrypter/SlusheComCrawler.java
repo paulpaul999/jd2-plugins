@@ -16,26 +16,40 @@
 package jd.plugins.decrypter;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 import jd.PluginWrapper;
 import jd.controlling.ProgressController;
+import jd.http.Browser;
+import jd.nutils.encoding.Encoding;
+import jd.parser.Regex;
 import jd.plugins.CryptedLink;
 import jd.plugins.DecrypterPlugin;
 import jd.plugins.DownloadLink;
+import jd.plugins.FilePackage;
+import jd.plugins.LinkStatus;
+import jd.plugins.PluginException;
 import jd.plugins.PluginForDecrypt;
 import jd.plugins.hoster.DirectHTTP;
 
-@DecrypterPlugin(revision = "$Revision: 48016 $", interfaceVersion = 3, names = {}, urls = {})
-public class TmExchangeCom extends PluginForDecrypt {
-    public TmExchangeCom(PluginWrapper wrapper) {
+@DecrypterPlugin(revision = "$Revision: 48506 $", interfaceVersion = 3, names = {}, urls = {})
+public class SlusheComCrawler extends PluginForDecrypt {
+    public SlusheComCrawler(PluginWrapper wrapper) {
         super(wrapper);
+    }
+
+    @Override
+    public Browser createNewBrowserInstance() {
+        final Browser br = super.createNewBrowserInstance();
+        br.setFollowRedirects(true);
+        return br;
     }
 
     public static List<String[]> getPluginDomains() {
         final List<String[]> ret = new ArrayList<String[]>();
         // each entry in List<String[]> will result in one PluginForDecrypt, Plugin.getHost() will return String[0]->main domain
-        ret.add(new String[] { "tm-exchange.com" });
+        ret.add(new String[] { "slushe.com" });
         return ret;
     }
 
@@ -55,14 +69,38 @@ public class TmExchangeCom extends PluginForDecrypt {
     public static String[] buildAnnotationUrls(final List<String[]> pluginDomains) {
         final List<String> ret = new ArrayList<String>();
         for (final String[] domains : pluginDomains) {
-            ret.add("https?://(?:\\w+\\.)?" + buildHostsPatternPart(domains) + "/(get\\.aspx\\?action=trackgbx|\\?action=trackshow)\\&id=\\d+");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/galleries/([a-z0-9\\-]+)-(\\d+)\\.html");
         }
         return ret.toArray(new String[0]);
     }
 
     public ArrayList<DownloadLink> decryptIt(final CryptedLink param, ProgressController progress) throws Exception {
         final ArrayList<DownloadLink> ret = new ArrayList<DownloadLink>();
-        ret.add(createDownloadlink(DirectHTTP.createURLForThisPlugin(param.getCryptedUrl().replaceFirst("(?i)\\?action=trackshow", "get.aspx?action=trackgbx"))));
+        br.getPage(param.getCryptedUrl());
+        if (br.getHttpConnection().getResponseCode() == 404) {
+            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
+        }
+        final Regex urlinfo = new Regex(param.getCryptedUrl(), this.getSupportedLinks());
+        final String titleSlug = urlinfo.getMatch(0);
+        final String galleryID = urlinfo.getMatch(1);
+        final String fpName = titleSlug.replace("-", " ").trim();
+        final String[] imagelinks = br.getRegex("class=\"download-img-btn\"[^<]*data-url=\"(https?://[^\"]+)").getColumn(0);
+        if (imagelinks == null || imagelinks.length == 0) {
+            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+        }
+        final HashSet<String> dupes = new HashSet<String>();
+        for (final String imagelink : imagelinks) {
+            if (!dupes.add(imagelink)) {
+                continue;
+            }
+            final DownloadLink image = createDownloadlink(DirectHTTP.createURLForThisPlugin(imagelink));
+            image.setAvailable(true);
+            ret.add(image);
+        }
+        final FilePackage fp = FilePackage.getInstance();
+        fp.setName(Encoding.htmlDecode(fpName).trim());
+        fp.setPackageKey("slushe_com://gallery/" + galleryID);
+        fp.addLinks(ret);
         return ret;
     }
 }

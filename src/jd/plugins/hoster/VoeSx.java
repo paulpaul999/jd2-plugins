@@ -41,7 +41,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 import jd.plugins.decrypter.VoeSxCrawler;
 
-@HostPlugin(revision = "$Revision: 48418 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48492 $", interfaceVersion = 3, names = {}, urls = {})
 @PluginDependencies(dependencies = { VoeSxCrawler.class })
 public class VoeSx extends XFileSharingProBasic {
     public VoeSx(final PluginWrapper wrapper) {
@@ -161,7 +161,11 @@ public class VoeSx extends XFileSharingProBasic {
         if (mp4Master != null) {
             return mp4Master;
         }
-        final String hlsMaster = new Regex(src, "(\"|')hls\\1\\s*:\\s*(\"|')(https?://[^\"']+)").getMatch(2);
+        String hlsMaster = new Regex(src, "(\"|')hls\\1\\s*:\\s*(\"|')(https?://[^\"']+)").getMatch(2);
+        if (hlsMaster == null) {
+            /* 2023-11-21 */
+            hlsMaster = new Regex(src, "\"(https?://[^/]+/engine/hls[^\"]+)").getMatch(0);
+        }
         if (hlsMaster != null) {
             return hlsMaster;
         } else {
@@ -274,6 +278,10 @@ public class VoeSx extends XFileSharingProBasic {
                 if (dllink == null) {
                     /* 2023-10-07 */
                     dllink = br.getRegex("<a href=\"(http[^\"]+)\"[^>]*class=\"btn btn-primary\" target=\"_blank\"").getMatch(0);
+                    if (dllink == null) {
+                        /* 2023-11-21 */
+                        dllink = br.getRegex("\"(https?://[^/]+/engine/download/[^\"]+)\"").getMatch(0);
+                    }
                 }
                 if (dllink != null) {
                     dllink = Encoding.htmlOnlyDecode(dllink);

@@ -111,7 +111,7 @@ import jd.plugins.components.UserAgents.BrowserName;
 import jd.plugins.hoster.YoutubeDashV2;
 import jd.utils.locale.JDL;
 
-@DecrypterPlugin(revision = "$Revision: 48481 $", interfaceVersion = 3, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48505 $", interfaceVersion = 3, names = {}, urls = {})
 public class TbCmV2 extends PluginForDecrypt {
     private static final int DDOS_WAIT_MAX        = Application.isJared(null) ? 1000 : 10;
     private static final int DDOS_INCREASE_FACTOR = 15;
@@ -146,6 +146,7 @@ public class TbCmV2 extends PluginForDecrypt {
             String pattern = "https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/";
             pattern += "(";
             pattern += "embed(\\?v=|/)" + VIDEO_ID_PATTERN + ".*";
+            pattern += "|live/" + VIDEO_ID_PATTERN;
             pattern += "|watch.*";
             pattern += "|shorts/" + VIDEO_ID_PATTERN + ".*";
             pattern += "|(?:view_play_list|playlist)\\?.+";
@@ -208,6 +209,9 @@ public class TbCmV2 extends PluginForDecrypt {
                 vuid = new Regex(url, "(?i)/shorts/" + VIDEO_ID_PATTERN).getMatch(0);
                 if (vuid == null) {
                     vuid = new Regex(url, "(?i)/embed/(?!videoseries\\?)" + VIDEO_ID_PATTERN).getMatch(0);
+                    if (vuid == null) {
+                        vuid = new Regex(url, "(?i)/live/" + VIDEO_ID_PATTERN).getMatch(0);
+                    }
                 }
             }
         }
