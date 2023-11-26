@@ -71,7 +71,7 @@ import jd.plugins.PluginForHost;
 import jd.plugins.hoster.DirectHTTP;
 import jd.plugins.hoster.RedditCom;
 
-@DecrypterPlugin(revision = "$Revision: 48506 $", interfaceVersion = 3, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48523 $", interfaceVersion = 3, names = {}, urls = {})
 @PluginDependencies(dependencies = { RedditCom.class })
 public class RedditComCrawler extends PluginForDecrypt {
     public RedditComCrawler(PluginWrapper wrapper) {
@@ -483,6 +483,7 @@ public class RedditComCrawler extends PluginForDecrypt {
                                 /* Filename from URL contains .gif extension but this is a .mp4 file -> Correct that */
                                 direct.setFinalFileName(this.correctOrApplyFileNameExtension(filenameFromURL, ".mp4"));
                             }
+                            direct.setProperty(RedditCom.PROPERTY_TYPE, RedditCom.PROPERTY_TYPE_video);
                             direct.setAvailable(true);
                             thisCrawledLinks.add(direct);
                         }
