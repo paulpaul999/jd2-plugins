@@ -70,7 +70,7 @@ import jd.plugins.hoster.VKontakteRuHoster;
 import jd.plugins.hoster.VKontakteRuHoster.Quality;
 import jd.plugins.hoster.VKontakteRuHoster.QualitySelectionMode;
 
-@DecrypterPlugin(revision = "$Revision: 48483 $", interfaceVersion = 2, names = { "vk.com" }, urls = { "https?://(?:www\\.|m\\.|new\\.)?(?:(?:vk\\.com|vkontakte\\.ru|vkontakte\\.com)/(?!doc[\\d\\-]+_[\\d\\-]+|picturelink|audiolink)[a-z0-9_/=\\.\\-\\?&%@:\\!]+|vk\\.cc/[A-Za-z0-9]+)" })
+@DecrypterPlugin(revision = "$Revision: 48518 $", interfaceVersion = 2, names = { "vk.com" }, urls = { "https?://(?:www\\.|m\\.|new\\.)?(?:(?:vk\\.com|vkontakte\\.ru|vkontakte\\.com)/(?!doc[\\d\\-]+_[\\d\\-]+|picturelink|audiolink)[a-z0-9_/=\\.\\-\\?&%@:\\!]+|vk\\.cc/[A-Za-z0-9]+)" })
 public class VKontakteRu extends PluginForDecrypt {
     public VKontakteRu(PluginWrapper wrapper) {
         super(wrapper);
@@ -2130,7 +2130,9 @@ public class VKontakteRu extends PluginForDecrypt {
                 }
             }
             if (grabPhoto && photosMap != null) {
+                final int count = ((Number) photosMap.get("count")).intValue();
                 final List<Map<String, Object>> photos = (List<Map<String, Object>>) photosMap.get("items");
+                logger.info("WebAPI photos.get: Count: " + count + " | Crawling now: " + photos.size());
                 for (final Map<String, Object> photo : photos) {
                     final String owner_id = photo.get("owner_id").toString();
                     final String content_id = photo.get("id").toString();
