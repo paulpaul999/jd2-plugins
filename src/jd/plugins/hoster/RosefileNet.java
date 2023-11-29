@@ -49,7 +49,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 import jd.plugins.components.SiteType.SiteTemplate;
 
-@HostPlugin(revision = "$Revision: 48501 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48528 $", interfaceVersion = 3, names = {}, urls = {})
 public class RosefileNet extends PluginForHost {
     public RosefileNet(PluginWrapper wrapper) {
         super(wrapper);
@@ -192,7 +192,7 @@ public class RosefileNet extends PluginForHost {
             final boolean looksLikePremiumADownloadWithoutWait = br.containsHTML("load_down");
             if (account != null && looksLikePremiumADownloadWithoutWait) {
                 final UrlQuery query = new UrlQuery();
-                query.add("action", "check_recaptchac");
+                query.add("action", "check_recaptcha");
                 query.add("file_id", internalFileID);
                 ajax.postPage("/ajax.php", query);
             } else {

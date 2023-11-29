@@ -111,7 +111,7 @@ import jd.plugins.components.UserAgents.BrowserName;
 import jd.plugins.hoster.YoutubeDashV2;
 import jd.utils.locale.JDL;
 
-@DecrypterPlugin(revision = "$Revision: 48505 $", interfaceVersion = 3, names = {}, urls = {})
+@DecrypterPlugin(revision = "$Revision: 48529 $", interfaceVersion = 3, names = {}, urls = {})
 public class TbCmV2 extends PluginForDecrypt {
     private static final int DDOS_WAIT_MAX        = Application.isJared(null) ? 1000 : 10;
     private static final int DDOS_INCREASE_FACTOR = 15;
@@ -374,7 +374,7 @@ public class TbCmV2 extends PluginForDecrypt {
             synchronized (DIALOGLOCK) {
                 if (this.isAbort()) {
                     logger.info("Thread Aborted!");
-                    return ret;
+                    throw new InterruptedException();
                 }
                 /* Ask user: Prevents accidental crawling of entire Play-List or Channel-List or User-List. */
                 IfUrlisAPlaylistAction playListAction = cfg.getLinkIsPlaylistUrlAction();
@@ -971,7 +971,7 @@ public class TbCmV2 extends PluginForDecrypt {
             }
             if (this.isAbort()) {
                 logger.info("Aborted!");
-                return ret;
+                throw new InterruptedException();
             }
         }
         return ret;
