@@ -44,10 +44,10 @@ import jd.plugins.components.SiteType.SiteTemplate;
  * @author raztoki
  *
  */
-@HostPlugin(revision = "$Revision: 48532 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48542 $", interfaceVersion = 3, names = {}, urls = {})
 /* 2020-08-27: Working example: dirtymovie.com */
 public class PimpRollHostedTube extends PluginForHost {
-    public static String[] t = { "bestporno.net", "descargarpelisporno.com", "redgayporntube.com", "sexfilmer.nu", "teenpornocity.com" };
+    public static String[] t = { "descargarpelisporno.com", "redgayporntube.com", "teenpornocity.com" };
 
     @Override
     public LazyPlugin.FEATURE[] getFeatures() {
