@@ -46,7 +46,7 @@ import jd.plugins.LinkStatus;
 import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 
-@HostPlugin(revision = "$Revision: 47858 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48542 $", interfaceVersion = 3, names = {}, urls = {})
 public class FreeM3DownloadNet extends PluginForHost {
     public FreeM3DownloadNet(PluginWrapper wrapper) {
         super(wrapper);
@@ -243,19 +243,22 @@ public class FreeM3DownloadNet extends PluginForHost {
         }
         if (!attemptStoredDownloadurlDownload(link, directlinkproperty, FREE_RESUME, FREE_MAXCHUNKS)) {
             String dllink = null;
+            String formatID = null;
+            String formatLabel = null;
             synchronized (antiCaptchaCookies) {
                 requestFileInformation(link);
-                final HashMap<String, Object> postdata = new HashMap<String, Object>();
+                final Map<String, Object> postdata = new HashMap<String, Object>();
                 postdata.put("i", Long.parseLong(this.getFID(link)));
                 /* Random 20 char lowercase string --> We'll just use an UUID */
                 // final String str = UUID.randomUUID().toString();
                 // postdata.put("ch", str);
                 final String[] formatInfo = getFormatInfo(br);
-                final String f = formatInfo[0];
-                if (f == null) {
+                formatID = formatInfo[0];
+                formatLabel = formatInfo[1];
+                if (formatID == null) {
                     throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
                 }
-                postdata.put("f", Encoding.urlEncode(f));
+                postdata.put("f", Encoding.urlEncode(formatID));
                 boolean captchaRequiredInThisRun;
                 if (br.containsHTML("class=\"g-recaptcha\"")) {
                     final String recaptchaV2Response = new CaptchaHelperHostPluginRecaptchaV2(this, br).getToken();
@@ -290,6 +293,11 @@ public class FreeM3DownloadNet extends PluginForHost {
                 }
                 link.setProperty(directlinkproperty, dllink);
             }
+            final String textForBrokenOrUnavailableAudioFiles = "Broken audio file or chosen format " + formatLabel + " is not available. Select another format in plugin settings and try again.";
+            if (dllink.matches("(?i)^https?://[^/]+/?$")) {
+                /* 2023-11-30: This can happen via browser too. */
+                throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, textForBrokenOrUnavailableAudioFiles);
+            }
             dl = jd.plugins.BrowserAdapter.openDownload(br, link, dllink, FREE_RESUME, FREE_MAXCHUNKS);
             if (!this.looksLikeDownloadableContent(dl.getConnection())) {
                 br.followConnection(true);
@@ -298,7 +306,8 @@ public class FreeM3DownloadNet extends PluginForHost {
                 } else if (dl.getConnection().getResponseCode() == 404) {
                     throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 404", 5 * 60 * 1000l);
                 } else {
-                    throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+                    /* 2023-11-30: This can happen via browser too. */
+                    throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, textForBrokenOrUnavailableAudioFiles);
                 }
             }
         }

@@ -33,6 +33,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_IMAGE_GALLERY_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
         },
         IMAGE_HOST {
             @Override
@@ -43,6 +48,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_IMAGE_HOST_TOOLTIP();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return false;
             }
         },
         AUDIO_STREAMING {
@@ -55,6 +65,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_AUDIO_STREAMING_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
         },
         VIDEO_STREAMING {
             @Override
@@ -65,6 +80,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_VIDEO_STREAMING_TOOLTIP();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return false;
             }
         },
         USENET {
@@ -77,6 +97,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_USENET_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
         },
         MULTIHOST {
             @Override
@@ -87,6 +112,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_MULTIHOST_TOOLTIP();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return false;
             }
         },
         PASTEBIN {
@@ -99,6 +129,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_PASTEBIN_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
         },
         XXX {
             @Override
@@ -109,6 +144,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_XXX_TOOLTIP();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return false;
             }
         },
         GENERIC {
@@ -121,6 +161,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_GENERIC_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return true;
+            }
         },
         FAVICON {
             @Override
@@ -131,6 +176,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_FAVICON_TOOLTIP();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return true;
             }
         },
         INTERNAL {
@@ -143,6 +193,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return "INTERNAL";
             }
+
+            @Override
+            public boolean isInternal() {
+                return true;
+            }
         },
         ASSIGN_PLUGIN {
             @Override
@@ -153,6 +208,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return "ASSIGN_PLUGIN";
+            }
+
+            @Override
+            public boolean isInternal() {
+                return true;
             }
         },
         COOKIE_LOGIN_ONLY {
@@ -165,6 +225,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_COOKIE_LOGIN_ONLY_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
         },
         COOKIE_LOGIN_OPTIONAL {
             @Override
@@ -175,6 +240,11 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             @Override
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_COOKIE_LOGIN_OPTIONAL_TOOLTIP();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return false;
             }
         },
         API_KEY_LOGIN {
@@ -187,26 +257,30 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             public String getTooltip() {
                 return _JDT.T.LazyHostPlugin_FEATURE_API_KEY_LOGIN_TOOLTIP();
             }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
+        },
+        USERNAME_IS_EMAIL {
+            @Override
+            public String getLabel() {
+                return _JDT.T.LazyHostPlugin_FEATURE_USERNAME_IS_EMAIL();
+            }
+
+            @Override
+            public String getTooltip() {
+                return _JDT.T.LazyHostPlugin_FEATURE_USERNAME_IS_EMAIL();
+            }
+
+            @Override
+            public boolean isInternal() {
+                return false;
+            }
         };
 
         public static final long CACHEVERSION = Math.abs(StringUtils.join(values(), "<->").hashCode()) + Math.abs(StringUtils.join(values(), ":").hashCode()) + Math.abs(StringUtils.join(values(), "<=>").hashCode());
-
-        public static boolean isInternalFeature(FEATURE feature) {
-            // TODO: 2023-11-24: Move this into the FEATURE ENUM class itself via separate method
-            if (feature != null) {
-                switch (feature) {
-                case FAVICON:
-                case INTERNAL:
-                case ASSIGN_PLUGIN:
-                case GENERIC:
-                    return true;
-                default:
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
 
         public boolean isSet(FEATURE[] features) {
             if (features != null) {
@@ -218,6 +292,12 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
             }
             return false;
         }
+
+        /**
+         * Return true if this is an internal feature. </br>
+         * Internal features are used internally only and are not displayed in GUI.
+         */
+        public abstract boolean isInternal();
     }
 
     /**
@@ -227,10 +307,10 @@ public abstract class LazyPlugin<T extends Plugin> implements MinTimeWeakReferen
      * @return
      */
     public boolean hasFeature(final FEATURE... features) {
-        final FEATURE[] pluginFeatures = getFeatures();
-        if (features != null && features.length > 0 && pluginFeatures != null && pluginFeatures.length > 0) {
+        final FEATURE[] thisPluginFeatures = getFeatures();
+        if (features != null && features.length > 0 && thisPluginFeatures != null && thisPluginFeatures.length > 0) {
             for (final FEATURE feature : features) {
-                if (feature.isSet(pluginFeatures)) {
+                if (feature.isSet(thisPluginFeatures)) {
                     return true;
                 }
             }

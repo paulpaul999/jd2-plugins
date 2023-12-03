@@ -48,7 +48,7 @@ import jd.plugins.HostPlugin;
 import jd.plugins.LinkStatus;
 import jd.plugins.PluginException;
 
-@HostPlugin(revision = "$Revision: 48483 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48544 $", interfaceVersion = 3, names = {}, urls = {})
 public class SendCm extends XFileSharingProBasic {
     public SendCm(final PluginWrapper wrapper) {
         super(wrapper);
@@ -386,6 +386,7 @@ public class SendCm extends XFileSharingProBasic {
     @Override
     public AccountInfo fetchAccountInfo(final Account account) throws Exception {
         /* 2023-10-27: Special: Try API login first */
+        // TODO: Refactor this once next Fullbuild has been released
         String apikey = getAPIKeyFromAccount(account);
         final boolean tryApikeyViaPasswordField = true;
         boolean apiFromAccountPasswordField = false;
@@ -588,6 +589,7 @@ public class SendCm extends XFileSharingProBasic {
 
     @Override
     protected boolean allowAPIDownloadIfApikeyIsAvailable(final DownloadLink link, final Account account) {
+        // TODO: Refactor/remove this after next Fullbuild
         if (account == null) {
             return false;
         } else {

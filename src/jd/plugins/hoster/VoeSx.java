@@ -41,7 +41,7 @@ import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 import jd.plugins.decrypter.VoeSxCrawler;
 
-@HostPlugin(revision = "$Revision: 48492 $", interfaceVersion = 3, names = {}, urls = {})
+@HostPlugin(revision = "$Revision: 48543 $", interfaceVersion = 3, names = {}, urls = {})
 @PluginDependencies(dependencies = { VoeSxCrawler.class })
 public class VoeSx extends XFileSharingProBasic {
     public VoeSx(final PluginWrapper wrapper) {
@@ -157,14 +157,14 @@ public class VoeSx extends XFileSharingProBasic {
 
     @Override
     protected String getDllinkVideohost(DownloadLink link, Account account, Browser br, final String src) {
-        final String mp4Master = new Regex(src, "(\"|')mp4\\1\\s*:\\s*(\"|')(https?://[^\"']+)").getMatch(2);
+        final String mp4Master = new Regex(src, "(?i)(\"|')mp4\\1\\s*:\\s*(\"|')(https?://[^\"']+)").getMatch(2);
         if (mp4Master != null) {
             return mp4Master;
         }
-        String hlsMaster = new Regex(src, "(\"|')hls\\1\\s*:\\s*(\"|')(https?://[^\"']+)").getMatch(2);
+        String hlsMaster = new Regex(src, "(?i)(\"|')hls\\1\\s*:\\s*(\"|')(https?://[^\"']+)").getMatch(2);
         if (hlsMaster == null) {
             /* 2023-11-21 */
-            hlsMaster = new Regex(src, "\"(https?://[^/]+/engine/hls[^\"]+)").getMatch(0);
+            hlsMaster = new Regex(src, "(?i)\"(https?://[^/]+/engine/hls[^\"]+)").getMatch(0);
         }
         if (hlsMaster != null) {
             return hlsMaster;
@@ -182,6 +182,9 @@ public class VoeSx extends XFileSharingProBasic {
         if (br.containsHTML(">\\s*Server overloaded, download temporary disabled|The server of this file is currently over")) {
             /* 2023-10-26 */
             throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server overloaded");
+        } else if (br.containsHTML(">\\s*Access to this file has been temporarily restricted")) {
+            /* 2023-11-29 */
+            throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Access to this file has been temporarily restricted");
         }
     }
 
@@ -205,7 +208,7 @@ public class VoeSx extends XFileSharingProBasic {
             throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
         }
         final String[] fileInfo = internal_getFileInfoArray();
-        scanInfo(fileInfo);
+        scanInfo(br.getRequest().getHtmlCode(), fileInfo);
         processFileInfo(fileInfo, br, link);
         if (!StringUtils.isEmpty(fileInfo[0])) {
             /* Correct- and set filename */
@@ -219,6 +222,20 @@ public class VoeSx extends XFileSharingProBasic {
             throw new PluginException(LinkStatus.ERROR_FATAL, "This video can be watched as embed only");
         }
         return dllink;
+    }
+
+    @Override
+    public String[] scanInfo(final String html, final String[] fileInfo) {
+        super.scanInfo(html, fileInfo);
+        String betterTitle = new Regex(html, "class=\"player-title\"[^>]*>([^<]+)").getMatch(0);
+        if (betterTitle == null) {
+            /* 2023-11-29 */
+            betterTitle = new Regex(html, "name=\"og:title\" content=\"([^\"]+\\.mp4)").getMatch(0);
+        }
+        if (betterTitle != null) {
+            fileInfo[0] = betterTitle;
+        }
+        return fileInfo;
     }
 
     @Override
@@ -247,7 +264,7 @@ public class VoeSx extends XFileSharingProBasic {
             }
             final String streamDownloadlink = getDllinkVideohost(link, account, br, br.getRequest().getHtmlCode());
             final DownloadMode mode = this.getPreferredDownloadModeFromConfig();
-            if (streamDownloadlink != null && (mode == DownloadMode.STREAM || mode == DownloadMode.AUTO)) {
+            if (streamDownloadlink != null && (mode == DownloadMode.STREAM || mode == DownloadMode.AUTO) && Boolean.TRUE.equals(requiresCaptchaForOfficialVideoDownload())) {
                 /*
                  * User wants to download stream. Obtaining an official downloadlink would require the user to enter a captcha -> Skip that.
                  */
@@ -314,16 +331,6 @@ public class VoeSx extends XFileSharingProBasic {
                 }
             }
         };
-    }
-
-    @Override
-    public String[] scanInfo(final String html, final String[] fileInfo) {
-        super.scanInfo(html, fileInfo);
-        final String betterTitle = br.getRegex("class=\"player-title\"[^>]*>([^<]+)").getMatch(0);
-        if (betterTitle != null) {
-            fileInfo[0] = betterTitle;
-        }
-        return fileInfo;
     }
 
     @Override
