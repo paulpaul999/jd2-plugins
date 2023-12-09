@@ -30,7 +30,7 @@ import jd.plugins.LinkStatus;
 import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 
-@HostPlugin(revision = "$Revision: 48550 $", interfaceVersion = 3, names = { "put.io" }, urls = { "https?://(?:[a-z0-9\\-]+\\.)?put\\.io/(?:(?:v2/)?files/\\d+/(mp4/download(/[^/]*)?|download(/[^/]*)?)|zipstream/\\d+.*|download/\\d+.*)\\?oauth_token=[A-Z0-9]+" })
+@HostPlugin(revision = "$Revision: 48562 $", interfaceVersion = 3, names = { "put.io" }, urls = { "https?://(?:[a-z0-9\\-]+\\.)?put\\.io/(?:(?:v2/)?files/\\d+/(mp4/download(/[^/]*)?|download(/[^/]*)?)|zipstream/\\d+.*?|download/\\d+.*)\\?oauth_token=[A-Z0-9]+.*" })
 public class PutIO extends PluginForHost {
     private final String API_BASE      = "https://api.put.io/v2";
     private final String CLIENT_ID     = "181";
@@ -39,6 +39,11 @@ public class PutIO extends PluginForHost {
     public PutIO(PluginWrapper wrapper) {
         super(wrapper);
         enablePremium("https://put.io");
+    }
+
+    @Override
+    public String getAGBLink() {
+        return "https://put.io/tos";
     }
 
     @Override
@@ -51,18 +56,101 @@ public class PutIO extends PluginForHost {
     }
 
     @Override
-    public boolean canHandle(final DownloadLink downloadLink, final Account account) throws Exception {
-        if (account == null) {
-            return false;
+    public String getLinkID(final DownloadLink link) {
+        try {
+            final String fileID = getUniqueFileID(link.getPluginPatternMatcher());
+            return "put_io://file/" + fileID;
+        } catch (final Throwable e) {
+            e.printStackTrace();
+        }
+        return super.getLinkID(link);
+    }
+
+    /* Returns unique fileID. */
+    private String getUniqueFileID(final String url) throws PluginException {
+        final String id = new Regex(url, "(?i)/(files|download)/(\\d+)").getMatch(1);
+        if (id == null) {
+            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
         } else {
-            if (downloadLink != null) {
-                final String user = downloadLink.getStringProperty("requires_account", null);
-                if (user != null) {
-                    return StringUtils.equalsIgnoreCase(user, account.getUser());
+            return id;
+        }
+    }
+
+    @Override
+    public boolean canHandle(final DownloadLink link, final Account account) throws Exception {
+        if (link != null && this.isZipStreamURL(link.getPluginPatternMatcher())) {
+            /* Such links can be checked and downloaded without account. */
+            return true;
+        } else if (account == null) {
+            return false;
+        } else if (link != null) {
+            /* Check if given link is downloadable with given account. */
+            final String user = link.getStringProperty("requires_account", null);
+            if (user != null) {
+                return StringUtils.equalsIgnoreCase(user, account.getUser());
+            }
+        }
+        return super.canHandle(link, account);
+    }
+
+    @Override
+    public AvailableStatus requestFileInformation(final DownloadLink link) throws Exception {
+        final ArrayList<Account> accounts = AccountController.getInstance().getValidAccounts(getHost());
+        if (accounts != null && accounts.size() > 0) {
+            for (final Account account : accounts) {
+                try {
+                    return requestFileInformation(link, account);
+                } catch (final PluginException e) {
+                    if (e.getLinkStatus() == LinkStatus.ERROR_FILE_NOT_FOUND) {
+                        throw e;
+                    } else {
+                        logger.log(e);
+                    }
                 }
             }
-            return super.canHandle(downloadLink, account);
+            throw new AccountRequiredException();
+        } else {
+            /* No account */
+            return requestFileInformation(link, null);
         }
+    }
+
+    private AvailableStatus requestFileInformation(final DownloadLink link, final Account account) throws Exception {
+        if (account == null && this.requiresAccount(link.getPluginPatternMatcher())) {
+            throw new AccountRequiredException();
+        }
+        String access_tokenFromAccount = null;
+        final String directurl;
+        if (account != null) {
+            access_tokenFromAccount = login(account);
+            directurl = getDownloadURL(link, access_tokenFromAccount);
+        } else {
+            directurl = getDownloadURL(link, null);
+        }
+        final Request request = new HeadRequest(directurl);
+        if (access_tokenFromAccount != null) {
+            request.getHeaders().put(new HTTPHeader("Authorization", "token " + access_tokenFromAccount, false));
+        }
+        br.getPage(request);
+        final URLConnectionAdapter connection = br.getHttpConnection();
+        try {
+            handleConnectionErrorsAndSetFileInfo(link, br, connection);
+            /* No Exception = Success */
+            if (account != null) {
+                /* Store information that this link is downloadable with this account. */
+                link.setProperty("requires_account", account.getUser());
+            }
+        } finally {
+            connection.disconnect();
+        }
+        return AvailableStatus.TRUE;
+    }
+
+    @Override
+    public void handleFree(final DownloadLink link) throws Exception {
+        requestFileInformation(link, null);
+        final String url = getDownloadURL(link, null);
+        this.handleDownload(br, link, null, url);
     }
 
     @Override
@@ -76,7 +164,7 @@ public class PutIO extends PluginForHost {
                 throw new AccountUnavailableException("http error " + br.getHttpConnection().getResponseCode(), 5 * 60 * 1000);
             }
         }
-        final Map<String, Object> infoResponse = restoreFromString(br.toString(), TypeRef.MAP);
+        final Map<String, Object> infoResponse = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
         final Map<String, Object> info = (Map<String, Object>) infoResponse.get("info");
         final String dateExpireStr = (String) info.get("plan_expiration_date");
         final long dateExpire = TimeFormatter.getMilliSeconds(dateExpireStr, "yyyy-MM-dd'T'HH:mm:ss", Locale.ENGLISH);
@@ -90,61 +178,57 @@ public class PutIO extends PluginForHost {
         return ai;
     }
 
-    @Override
-    public String getAGBLink() {
-        return "https://put.io/tos";
-    }
-
-    @Override
-    public void handleFree(DownloadLink link) throws Exception {
-        throw new AccountRequiredException();
-    }
-
-    private String getToken(String url) {
-        return new Regex(url, "token=([a-fA-f0-9]+)").getMatch(0);
+    private String getToken(final String url) {
+        return new Regex(url, "(?i)oauth_token=([a-fA-f0-9]+)").getMatch(0);
     }
 
     private boolean isZipStreamURL(final String url) {
         return StringUtils.containsIgnoreCase(url, "/zipstream/");
     }
 
-    private String getID(String url) throws PluginException {
-        final String id = new Regex(url, "/(files|download)/(\\d+)").getMatch(1);
-        if (id == null) {
-            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+    private boolean requiresAccount(final String url) {
+        if (isZipStreamURL(url)) {
+            return false;
         } else {
-            return id;
+            /* All other URL-types: Account is required to be able to download. */
+            return true;
         }
     }
 
-    private boolean isDownload(URLConnectionAdapter con) {
+    @Override
+    protected boolean looksLikeDownloadableContent(final URLConnectionAdapter con) {
         return con.isOK() && (con.isContentDisposition() || !StringUtils.containsIgnoreCase(con.getContentType(), "text"));
     }
 
     @Override
-    public void handlePremium(DownloadLink link, Account account) throws Exception {
+    public void handlePremium(final DownloadLink link, final Account account) throws Exception {
         final String access_token = login(account);
         final String url = getDownloadURL(link, access_token);
         final Browser brc = br.cloneBrowser();
         brc.getHeaders().put("Authorization", "token " + access_token);
-        dl = jd.plugins.BrowserAdapter.openDownload(brc, link, url, true, 0);
-        final int responseCode = dl.getConnection().getResponseCode();
-        if (isDownload(dl.getConnection())) {
-            dl.startDownload();
-        } else if (responseCode == 404) {
-            try {
-                br.followConnection();
-            } catch (final IOException e) {
-                logger.log(e);
+        handleDownload(brc, link, account, url);
+    }
+
+    private void handleDownload(final Browser br, final DownloadLink link, final Account account, final String directurl) throws Exception {
+        dl = jd.plugins.BrowserAdapter.openDownload(br, link, directurl, true, 0);
+        handleConnectionErrorsAndSetFileInfo(link, br, dl.getConnection());
+        dl.startDownload();
+    }
+
+    private void handleConnectionErrorsAndSetFileInfo(final DownloadLink link, final Browser br, final URLConnectionAdapter con) throws PluginException, IOException {
+        if (!this.looksLikeDownloadableContent(con)) {
+            br.followConnection(true);
+            if (con.getResponseCode() == 403) {
+                throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 403", 60 * 60 * 1000l);
+            } else if (con.getResponseCode() == 404) {
+                throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
+            } else {
+                throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "File broken?");
             }
-            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
-        } else {
-            try {
-                br.followConnection();
-            } catch (final IOException e) {
-                logger.log(e);
-            }
-            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
+        }
+        link.setVerifiedFileSize(con.getCompleteContentLength());
+        if (con.isContentDisposition()) {
+            link.setFinalFileName(getFileNameFromDispositionHeader(con));
         }
     }
 
@@ -189,12 +273,12 @@ public class PutIO extends PluginForHost {
         }
     }
 
-    private String getDownloadURL(final DownloadLink link, String access_token) throws PluginException {
+    private String getDownloadURL(final DownloadLink link, final String access_token) throws PluginException {
         final String finalLink;
         if (isZipStreamURL(link.getPluginPatternMatcher())) {
             finalLink = link.getPluginPatternMatcher();
         } else {
-            final String id = getID(link.getPluginPatternMatcher());
+            final String id = getUniqueFileID(link.getPluginPatternMatcher());
             // final String linkToken = getToken(link.getPluginPatternMatcher());
             if (id == null) {
                 throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
@@ -205,49 +289,8 @@ public class PutIO extends PluginForHost {
         }
         if (finalLink == null) {
             throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
-        } else {
-            return finalLink;
         }
-    }
-
-    @Override
-    public AvailableStatus requestFileInformation(final DownloadLink link) throws Exception {
-        final ArrayList<Account> accounts = AccountController.getInstance().getValidAccounts(getHost());
-        if (accounts != null) {
-            for (final Account account : accounts) {
-                try {
-                    final String access_token = login(account);
-                    final Request request = new HeadRequest(getDownloadURL(link, access_token));
-                    request.getHeaders().put(new HTTPHeader("Authorization", "token " + access_token, false));
-                    br.getPage(request);
-                    final URLConnectionAdapter connection = br.getHttpConnection();
-                    try {
-                        final int responseCode = connection.getResponseCode();
-                        if (isDownload(connection)) {
-                            link.setDownloadSize(connection.getCompleteContentLength());
-                            link.setProperty("requires_account", account.getUser());
-                            if (connection.isContentDisposition()) {
-                                link.setFinalFileName(getFileNameFromDispositionHeader(connection));
-                            }
-                            return AvailableStatus.TRUE;
-                        } else if (responseCode == 404) {
-                            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
-                        } else {
-                            throw new PluginException(LinkStatus.ERROR_PLUGIN_DEFECT);
-                        }
-                    } finally {
-                        connection.disconnect();
-                    }
-                } catch (final PluginException e) {
-                    if (e.getLinkStatus() == LinkStatus.ERROR_FILE_NOT_FOUND) {
-                        throw e;
-                    } else {
-                        logger.log(e);
-                    }
-                }
-            }
-        }
-        throw new AccountRequiredException();
+        return finalLink;
     }
 
     @Override
