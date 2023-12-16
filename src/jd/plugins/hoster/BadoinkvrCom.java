@@ -111,6 +111,11 @@ public class BadoinkvrCom extends PluginForHost {
     private static final int     free_maxdownloads      = -1;
     private String               dllink                 = null;
     private final String         PROPERTY_ACCOUNT_TOKEN = "authtoken";
+    /* Properties for crawler */
+    public static final String   PROPERTY_VIDEO_API_URL = "link_video_api_url";
+    public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
+    public static final String   PROPERTY_MEDIA_NAME    = "link_media_name";
+    public static final String   PROPERTY_MEDIA_RESOLUTION = "link_media_resolution";
 
     @Override
     public String getAGBLink() {
