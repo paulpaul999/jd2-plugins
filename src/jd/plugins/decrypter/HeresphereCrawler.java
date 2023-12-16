@@ -50,10 +50,15 @@ public class HeresphereCrawler extends PluginForDecrypt {
              * cosplaypornvideo: vrcosplayx.com </br>
              * bdsm-vr-video: kinkvr.com
              */
-            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:members/)?[\\w\\-]+/([a-z0-9\\-_]+)\\-(\\d+)/?");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:members/)?(?:[^/]+/)?[^/]*?(\\d{3,})");
         }
         return ret.toArray(new String[0]);
     }
+
+    private String getVideoId(final String link) {
+        return new Regex(link, this.getSupportedLinks()).getMatch(0);
+    }
+
 
     @Override
     public ArrayList<DownloadLink> decryptIt(CryptedLink parameter, ProgressController progress) throws Exception {
