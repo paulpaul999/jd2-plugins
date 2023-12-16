@@ -96,7 +96,7 @@ public class BadoinkvrCom extends PluginForHost {
              * cosplaypornvideo: vrcosplayx.com </br>
              * bdsm-vr-video: kinkvr.com
              */
-            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:members/)?[\\w\\-]+/([a-z0-9\\-_]+)\\-(\\d+)/?");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/heresphere/(.*)");
         }
         return ret.toArray(new String[0]);
     }
@@ -112,7 +112,6 @@ public class BadoinkvrCom extends PluginForHost {
     private String               dllink                 = null;
     private final String         PROPERTY_ACCOUNT_TOKEN = "authtoken";
     /* Properties for crawler */
-    public static final String   PROPERTY_VIDEO_API_URL = "link_video_api_url";
     public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
     public static final String   PROPERTY_MEDIA_NAME    = "link_media_name";
     public static final String   PROPERTY_MEDIA_RESOLUTION = "link_media_resolution";
@@ -122,18 +121,19 @@ public class BadoinkvrCom extends PluginForHost {
         return "https://" + getHost() + "/terms";
     }
 
-    @Override
-    public String getLinkID(final DownloadLink link) {
-        final String fid = getFID(link);
-        if (fid != null) {
-            return this.getHost() + "://video/" + fid;
-        } else {
-            return super.getLinkID(link);
-        }
-    }
+    // @Override
+    // public String getLinkID(final DownloadLink link) {
+    //     final String fid = getFID(link);
+    //     if (fid != null) {
+    //         return this.getHost() + "://video/" + fid;
+    //     } else {
+    //         return super.getLinkID(link);
+    //     }
+    // }
 
+    // TODO deprecate
     private String getFID(final DownloadLink link) {
-        return new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(1);
+        return new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0);
     }
 
     @Override
