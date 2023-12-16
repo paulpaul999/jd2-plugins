@@ -8,11 +8,16 @@ import java.util.List;
 import org.jdownloader.plugins.controller.LazyPlugin;
 
 import jd.PluginWrapper;
+import jd.controlling.AccountController;
 import jd.controlling.ProgressController;
+import jd.parser.Regex;
+import jd.plugins.Account;
 import jd.plugins.CryptedLink;
 import jd.plugins.DecrypterPlugin;
 import jd.plugins.DownloadLink;
+import jd.plugins.Plugin;
 import jd.plugins.PluginDependencies;
+import jd.plugins.hoster.AbbyWintersCom;
 import jd.plugins.hoster.BadoinkvrCom;
 
 @DecrypterPlugin(revision = "100000", interfaceVersion = 3, names = {}, urls = {})
@@ -62,7 +67,20 @@ public class HeresphereCrawler extends PluginForDecrypt {
 
     @Override
     public ArrayList<DownloadLink> decryptIt(CryptedLink parameter, ProgressController progress) throws Exception {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'decryptIt'");
+        final Account account = AccountController.getInstance().getValidAccount(this.getHost());
+
+        final ArrayList<DownloadLink> ret = new ArrayList<DownloadLink>();
+        final BadoinkvrCom hosterPlugin = (BadoinkvrCom) this.getNewPluginForHostInstance(this.getHost());
+        
+        // Grabbin
+        String filename = "8k_VR180.mp4";
+        String url = "https://povr.com/heresphere/1234567890";
+        final DownloadLink link = new DownloadLink(hosterPlugin, filename, this.getHost(), url, true);
+        link.setProperty(BadoinkvrCom.PROPERTY_ACCESS_LEVEL, Integer.valueOf(0));
+        link.setProperty(BadoinkvrCom.PROPERTY_MEDIA_NAME, "h265");
+        link.setProperty(BadoinkvrCom.PROPERTY_MEDIA_RESOLUTION, Integer.valueOf(4000));
+        
+        ret.add(link);
+        return ret;
     }
 }

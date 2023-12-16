@@ -96,7 +96,8 @@ public class BadoinkvrCom extends PluginForHost {
              * cosplaypornvideo: vrcosplayx.com </br>
              * bdsm-vr-video: kinkvr.com
              */
-            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/heresphere/(.*)");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:members/)?(?:[^/]+/)?[^/]*?(\\d{3,})");
+            // ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/heresphere/(.*)");
         }
         return ret.toArray(new String[0]);
     }
@@ -122,24 +123,24 @@ public class BadoinkvrCom extends PluginForHost {
     }
 
     public String buildHeresphereVideoURL(String videoId, boolean premium) {
-        String domain = getMappedHost(getPluginDomains(), this.getHost());
-        switch (domain) {
+        String host = this.getHost();
+        switch (host) {
             case "badoinkvr.com":
             case "kinkvr.com":
             case "babevr.com":
             case "vrcosplayx.com":
             case "18vr.com":
                 if (premium) {
-                    return "https://" + this.getHost() + "/heresphere/video/" + videoId;
+                    return "https://" + host + "/heresphere/video/" + videoId;
                 } else {
-                    return "https://" + this.getHost() + "/heresphere/video/" + videoId + "/trailer";
+                    return "https://" + host + "/heresphere/video/" + videoId + "/trailer";
                 }
 
             case "czechvrnetwork.com":
-                return "https://" + this.getHost() + "/heresphere/videoID" + videoId;
+                return "https://" + host + "/heresphere/videoID" + videoId;
             
             default:
-                return "https://" + this.getHost() + "/heresphere/" + videoId;
+                return "https://" + host + "/heresphere/" + videoId;
         }
     }
 
