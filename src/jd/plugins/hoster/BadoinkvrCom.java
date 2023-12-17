@@ -122,7 +122,7 @@ public class BadoinkvrCom extends PluginForHost {
         return "https://" + getHost() + "/terms";
     }
 
-    public String buildHeresphereVideoURL(String videoId, boolean premium) {
+    public String buildHeresphereVideoUrl(String videoId, boolean premiumRoute) {
         String host = this.getHost();
         switch (host) {
             case "badoinkvr.com":
@@ -130,7 +130,7 @@ public class BadoinkvrCom extends PluginForHost {
             case "babevr.com":
             case "vrcosplayx.com":
             case "18vr.com":
-                if (premium) {
+                if (premiumRoute) {
                     return "https://" + host + "/heresphere/video/" + videoId;
                 } else {
                     return "https://" + host + "/heresphere/video/" + videoId + "/trailer";
@@ -144,17 +144,16 @@ public class BadoinkvrCom extends PluginForHost {
         }
     }
 
-    // @Override
-    // public String getLinkID(final DownloadLink link) {
-    //     final String fid = getFID(link);
-    //     if (fid != null) {
-    //         return this.getHost() + "://video/" + fid;
-    //     } else {
-    //         return super.getLinkID(link);
-    //     }
-    // }
+    @Override
+    public String getLinkID(final DownloadLink link) {
+        final String fid = getFID(link);
+        if (fid != null) {
+            return this.getHost() + "://video/" + fid;
+        } else {
+            return super.getLinkID(link);
+        }
+    }
 
-    // TODO deprecate
     private String getFID(final DownloadLink link) {
         return new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0);
     }
@@ -165,13 +164,84 @@ public class BadoinkvrCom extends PluginForHost {
         return requestFileInformation(link, account, false);
     }
 
-    private boolean useHereSphereAPI(final Account account) {
-        // TODO: Allow API usage without account for some websites such as czechvrnetwork.com
+    private boolean decidePremiumRoute(final Account account) {
         if (account != null && account.getType() == AccountType.PREMIUM) {
             return true;
         } else {
             return false;
         }
+    }
+
+    private String pickVideoQuality(final Map<String, Object> videoInfos) {
+        String pickedUrl = null;
+
+        long filesizeMax = 0;
+        int resolutionMax = 0;
+        String pickedMediaName = null;
+
+        final List<Map<String, Object>> medias = (List<Map<String, Object>>) videoInfos.get("media");
+        for (final Map<String, Object> media : medias) {
+            final String mediaName = media.get("name").toString();
+            final List<Map<String, Object>> sources = (List<Map<String, Object>>) media.get("sources");
+            for (final Map<String, Object> source : sources) {
+                final Object filesizeO = source.get("size");
+                final Object resolutionO = source.get("resolution");
+                final String url = source.get("url").toString();
+                if (filesizeO != null) {
+                    /* Filesize is not always given */
+                    final long thisFilesize = ((Number) filesizeO).longValue();
+                    if (thisFilesize > filesizeMax) {
+                        filesizeMax = thisFilesize;
+                        pickedUrl = url;
+                        pickedMediaName = mediaName;
+                    }
+                } else if (resolutionO instanceof Number) {
+                    final int thisResolutionValue = ((Number) resolutionO).intValue();
+                    if (thisResolutionValue > resolutionMax) {
+                        resolutionMax = thisResolutionValue;
+                        pickedUrl = url;
+                        pickedMediaName = mediaName;
+                    }
+                }
+                /* Fallback: We always want to have a result */
+                if (pickedUrl == null) {
+                    pickedUrl = url;
+                    pickedMediaName = mediaName;
+                }
+            }
+        }
+        return pickedUrl;
+    }
+
+    public List<String> getTags(final Map<String, Object> videoInfos, final String prefix) {
+        List<String> ret = new ArrayList<String>();
+
+        List<Map<String, String>> tags = (List<Map<String, String>>) videoInfos.get("tags");
+        for (Map<String, String> tagMap : tags) {
+            String prefixedTag = tagMap.get("name");
+            if (prefixedTag.toLowerCase().startsWith(prefix.toLowerCase())) {
+                String tag = prefixedTag.substring(prefix.length());
+                ret.add(tag);
+            }
+        }
+        return ret;
+    }
+
+    private String getVideoFilename(final DownloadLink link, final String dllink, final Map<String, Object> videoInfos) {
+        if (this.getHost().endsWith("povr.com")) {
+            String regexpr = "\\.com/(?:[^/]*/)?([^/]+)-\\d+";
+            String videoUrlName = new Regex(link.getPluginPatternMatcher(), regexpr).getMatch(0);
+            String studioUrlFormatted = "";
+            List<String> tags = this.getTags(videoInfos, "Studio:");
+            if (tags.size() > 0) {
+                studioUrlFormatted = tags.getFirst().toLowerCase().replace(' ', '-');
+            }
+            return studioUrlFormatted + "-" + videoUrlName + "-180_180x180_3dh_LR.mp4";
+        }
+
+        /* default: extract filename from dllink */
+        String default_regexpr = "([^/?&=]+\\.(?:mp4|webm|mkv))";
+        return new Regex(dllink, default_regexpr).getMatch(0);
     }
 
     private AvailableStatus requestFileInformation(final DownloadLink link, final Account account, final boolean isDownload) throws Exception {
@@ -187,87 +257,25 @@ public class BadoinkvrCom extends PluginForHost {
         String filename = null;
         String title = null;
         String description = null;
-        if (useHereSphereAPI(account)) {
-            /* Use heresphere API */
-            this.login(account, false);
-            br.postPageRaw("https://" + this.getHost() + "/heresphere/video/" + videoid, "");
-            final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
-            title = entries.get("title").toString();
-            description = (String) entries.get("description");
-            long filesizeMax = 0;
-            int resolutionMax = 0;
-            String pickedMediaName = null;
-            final List<Map<String, Object>> medias = (List<Map<String, Object>>) entries.get("media");
-            for (final Map<String, Object> media : medias) {
-                final String mediaName = media.get("name").toString();
-                final List<Map<String, Object>> sources = (List<Map<String, Object>>) media.get("sources");
-                for (final Map<String, Object> source : sources) {
-                    final Object filesizeO = source.get("size");
-                    final Object resolutionO = source.get("resolution");
-                    final String url = source.get("url").toString();
-                    if (filesizeO != null) {
-                        /* Filesize is not always given */
-                        final long thisFilesize = ((Number) filesizeO).longValue();
-                        if (thisFilesize > filesizeMax) {
-                            filesizeMax = thisFilesize;
-                            this.dllink = url;
-                            pickedMediaName = mediaName;
-                        }
-                    } else if (resolutionO instanceof Number) {
-                        final int thisResolutionValue = ((Number) resolutionO).intValue();
-                        if (thisResolutionValue > resolutionMax) {
-                            resolutionMax = thisResolutionValue;
-                            this.dllink = url;
-                            pickedMediaName = mediaName;
-                        }
-                    }
-                    /* Fallback: We always want to have a result */
-                    if (this.dllink == null) {
-                        this.dllink = url;
-                        pickedMediaName = mediaName;
-                    }
-                }
-            }
-            if (this.dllink != null) {
-                filename = Plugin.getFileNameFromURL(this.dllink);
-            }
-            title += "_" + pickedMediaName;
-            filesize = filesizeMax;
-        } else {
-            /* Use website */
-            br.getPage(link.getPluginPatternMatcher());
-            if (br.getHttpConnection().getResponseCode() == 404) {
-                throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
-            }
-            if (br.containsHTML(videoid + "/trailer/")) {
-                br.getPage(br.getURL() + "trailer/");
-                logger.info("Looks like trailer is available -> Accessing it");
-                final String[] trailerurls = br.getRegex("<source[^<]*src=\"(https?://[^\"]+)\"[^<]*type=\"video/mp4\"").getColumn(0);
-                if (trailerurls != null && trailerurls.length > 0) {
-                    /* Assume that last item is highest quality trailer URL. */
-                    this.dllink = trailerurls[trailerurls.length - 1];
-                }
-            } else {
-                /* Legacy handling e.g. povr.com */
-                String trailerHlsMaster = null;
-                final String[] urls = HTMLParser.getHttpLinks(br.getRequest().getHtmlCode(), br.getURL());
-                for (final String url : urls) {
-                    if (StringUtils.endsWithCaseInsensitive(url, ".mp4")) {
-                        this.dllink = url;
-                        break;
-                    } else if (StringUtils.containsIgnoreCase(url, ".m3u8")) {
-                        // TODO: Make use of this HLS URL e.g. as fallback if http stream download fails.
-                        trailerHlsMaster = url;
-                    }
-                }
-            }
-            title = titleFromURL;
-        }
+        
+        /* Use heresphere API */
+        this.login(account, false);
+        boolean usePremiumRoute = this.decidePremiumRoute(account);
+        String videoApiUrl = buildHeresphereVideoUrl(videoid, usePremiumRoute);
+        br.postPageRaw(videoApiUrl, "");
+        final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
+        title = entries.get("title").toString();
+        description = (String) entries.get("description");
+
+        this.dllink = this.pickVideoQuality(entries);
+        filename = this.getVideoFilename(link, this.dllink, entries);
+
         if (!StringUtils.isEmpty(description) && link.getComment() == null) {
             link.setComment(description);
         }
         if (filename != null) {
             /* Pre defined filename -> Prefer that and use it as final filename. */
+            link.setName(filename);
             link.setFinalFileName(filename);
         } else if (!StringUtils.isEmpty(title)) {
             title = videoid + "_" + title;
@@ -327,9 +335,13 @@ public class BadoinkvrCom extends PluginForHost {
     }
 
     private Map<String, Object> login(final Account account, final boolean force) throws Exception {
+        br.setCookiesExclusive(true);
+        br.getHeaders().put("User-Agent", "HereSphere");
+        if (account == null) {
+            return null;
+        }
+
         synchronized (account) {
-            br.setCookiesExclusive(true);
-            br.getHeaders().put("User-Agent", "HereSphere");
             String token = account.getStringProperty(PROPERTY_ACCOUNT_TOKEN);
             final String urlpathAccountinfo = "/heresphere";
             if (token != null) {
