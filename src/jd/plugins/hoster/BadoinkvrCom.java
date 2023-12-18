@@ -75,6 +75,7 @@ public class BadoinkvrCom extends PluginForHost {
         ret.add(new String[] { "18vr.com" });
         // ret.add(new String[] { "www.czechvrnetwork.com" }); /* TODO handle www. subdomain */
         ret.add(new String[] { "povr.com" });
+        ret.add(new String[] { "wankzvr.com" });
         return ret;
     }
 
