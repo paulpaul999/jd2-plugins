@@ -112,8 +112,8 @@ public class BadoinkvrCom extends PluginForHost {
     private static final int     free_maxdownloads      = -1;
     private String               dllink                 = null;
     private final String         PROPERTY_ACCOUNT_TOKEN = "authtoken";
-    // /* Properties for crawler */
-    public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
+    /* Properties for link objects */
+    public static final String   PROPERTY_PREMIUM_DL  = "link_premium_dl";
     // public static final String   PROPERTY_MEDIA_NAME    = "link_media_name";
     // public static final String   PROPERTY_MEDIA_RESOLUTION = "link_media_resolution";
 
@@ -149,7 +149,7 @@ public class BadoinkvrCom extends PluginForHost {
         /* TODO: differentiate premium/trailer */
         final String fid = getFID(link);
         if (fid != null) {
-            return this.getHost() + "://video/" + fid + "/" + link.getStringProperty(PROPERTY_ACCESS_LEVEL);
+            return this.getHost() + "://video/" + fid + "/" + link.getStringProperty(PROPERTY_PREMIUM_DL);
         } else {
             return super.getLinkID(link);
         }
@@ -264,8 +264,8 @@ public class BadoinkvrCom extends PluginForHost {
         // }
         
         final boolean maxPossibleRoute = decidePremiumRoute(account);
-        final Boolean linkAccessLevel = (Boolean) link.getProperty(PROPERTY_ACCESS_LEVEL, Boolean.valueOf(maxPossibleRoute));
-        link.setProperty(PROPERTY_ACCESS_LEVEL, linkAccessLevel);
+        final Boolean linkAccessLevel = (Boolean) link.getProperty(PROPERTY_PREMIUM_DL, Boolean.valueOf(maxPossibleRoute));
+        link.setProperty(PROPERTY_PREMIUM_DL, linkAccessLevel);
         final boolean usePremiumRoute = linkAccessLevel.booleanValue();
         if (usePremiumRoute == true && maxPossibleRoute == false) {
             throw new AccountRequiredException();
