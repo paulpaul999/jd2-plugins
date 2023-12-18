@@ -393,7 +393,7 @@ public class BadoinkvrCom extends PluginForHost {
             if (!checkUrlGiven) {
                 checkUrl = apiMainEndpoint;
             }
-            final boolean useToken = account != null;
+            final boolean useToken = account != null; /* TODO: consider removing this, because this is implied by synchronized(account) -> never null */
             boolean tokenAvailable = false;
             if (account != null) {
                 tokenAvailable = (account.getStringProperty(PROPERTY_ACCOUNT_TOKEN) != null) && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN).isEmpty();
