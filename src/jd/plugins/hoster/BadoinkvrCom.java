@@ -113,7 +113,7 @@ public class BadoinkvrCom extends PluginForHost {
     private String               dllink                 = null;
     private final String         PROPERTY_ACCOUNT_TOKEN = "authtoken";
     // /* Properties for crawler */
-    // public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
+    public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
     // public static final String   PROPERTY_MEDIA_NAME    = "link_media_name";
     // public static final String   PROPERTY_MEDIA_RESOLUTION = "link_media_resolution";
 
@@ -149,7 +149,7 @@ public class BadoinkvrCom extends PluginForHost {
         /* TODO: differentiate premium/trailer */
         final String fid = getFID(link);
         if (fid != null) {
-            return this.getHost() + "://video/" + fid;
+            return this.getHost() + "://video/" + fid + "/" + link.getStringProperty(PROPERTY_ACCESS_LEVEL);
         } else {
             return super.getLinkID(link);
         }
@@ -263,15 +263,25 @@ public class BadoinkvrCom extends PluginForHost {
         //     throw new PluginException(LinkStatus.ERROR_PREMIUM, "Did not rx premium level access");
         // }
         
-        boolean usePremiumRoute = decidePremiumRoute(account);
+        final boolean maxPossibleRoute = decidePremiumRoute(account);
+        final Boolean linkAccessLevel = (Boolean) link.getProperty(PROPERTY_ACCESS_LEVEL, Boolean.valueOf(maxPossibleRoute));
+        link.setProperty(PROPERTY_ACCESS_LEVEL, linkAccessLevel);
+        final boolean usePremiumRoute = linkAccessLevel.booleanValue();
+        if (usePremiumRoute == true && maxPossibleRoute == false) {
+            throw new AccountRequiredException();
+        }
+
         String videoApiUrl = buildHeresphereVideoUrl(videoid, usePremiumRoute);
+        Account accountOrNull = usePremiumRoute ? account : null; /* TODO: decide if loggedIn=FREE is possible */
+
         /* Use heresphere API */
         Map<String, Object> entries = null;
-        if (account == null) {
-            entries = callApi(account, videoApiUrl);
+        if (!usePremiumRoute) {
+            entries = callApi(accountOrNull, videoApiUrl);
         } else {
-            entries = loginAndCallApi(account, videoApiUrl, false);
+            entries = loginAndCallApi(accountOrNull, videoApiUrl, false);
         }
+
         title = entries.get("title").toString();
         description = (String) entries.get("description");
 
