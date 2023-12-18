@@ -188,7 +188,8 @@ public class BadoinkvrCom extends PluginForHost {
                 final Object filesizeO = source.get("size");
                 final Object resolutionO = source.get("resolution");
                 final String url = source.get("url").toString();
-                if (filesizeO != null) {
+                final boolean enableFilesizePicking = false;
+                if (enableFilesizePicking && filesizeO != null) {
                     /* Filesize is not always given */
                     final long thisFilesize = ((Number) filesizeO).longValue();
                     if (thisFilesize > filesizeMax) {
