@@ -73,7 +73,7 @@ public class BadoinkvrCom extends PluginForHost {
         ret.add(new String[] { "babevr.com" });
         ret.add(new String[] { "vrcosplayx.com" });
         ret.add(new String[] { "18vr.com" });
-        ret.add(new String[] { "czechvrnetwork.com" });
+        // ret.add(new String[] { "www.czechvrnetwork.com" }); /* TODO handle www. subdomain */
         ret.add(new String[] { "povr.com" });
         return ret;
     }
@@ -112,10 +112,10 @@ public class BadoinkvrCom extends PluginForHost {
     private static final int     free_maxdownloads      = -1;
     private String               dllink                 = null;
     private final String         PROPERTY_ACCOUNT_TOKEN = "authtoken";
-    /* Properties for crawler */
-    public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
-    public static final String   PROPERTY_MEDIA_NAME    = "link_media_name";
-    public static final String   PROPERTY_MEDIA_RESOLUTION = "link_media_resolution";
+    // /* Properties for crawler */
+    // public static final String   PROPERTY_ACCESS_LEVEL  = "link_access_level";
+    // public static final String   PROPERTY_MEDIA_NAME    = "link_media_name";
+    // public static final String   PROPERTY_MEDIA_RESOLUTION = "link_media_resolution";
 
     @Override
     public String getAGBLink() {
@@ -137,7 +137,7 @@ public class BadoinkvrCom extends PluginForHost {
                 }
 
             case "czechvrnetwork.com":
-                return "https://www." + host + "/heresphere/videoID" + videoId;
+                return "https://" + host + "/heresphere/videoID" + videoId;
             
             default:
                 return "https://" + host + "/heresphere/" + videoId;
@@ -146,6 +146,7 @@ public class BadoinkvrCom extends PluginForHost {
 
     @Override
     public String getLinkID(final DownloadLink link) {
+        /* TODO: differentiate premium/trailer */
         final String fid = getFID(link);
         if (fid != null) {
             return this.getHost() + "://video/" + fid;
@@ -248,24 +249,29 @@ public class BadoinkvrCom extends PluginForHost {
         dllink = null;
         final String videoid = this.getFID(link);
         final String extDefault = ".mp4";
-        final String titleFromURL = new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0).replace("_", " ").trim();
-        if (!link.isNameSet()) {
-            link.setName(videoid + "_" + titleFromURL + extDefault);
-        }
+        // final String titleFromURL = new Regex(link.getPluginPatternMatcher(), this.getSupportedLinks()).getMatch(0).replace("_", " ").trim();
+        // if (!link.isNameSet()) {
+        //     link.setName(videoid + "_" + titleFromURL + extDefault);
+        // }
         this.setBrowserExclusive();
         long filesize = -1;
         String filename = null;
         String title = null;
         String description = null;
 
-        if (true) {
-            throw new PluginException(LinkStatus.ERROR_PREMIUM, "Did not rx premium level access");
-        }
+        // if (true) {
+        //     throw new PluginException(LinkStatus.ERROR_PREMIUM, "Did not rx premium level access");
+        // }
         
         boolean usePremiumRoute = decidePremiumRoute(account);
         String videoApiUrl = buildHeresphereVideoUrl(videoid, usePremiumRoute);
         /* Use heresphere API */
-        final Map<String, Object> entries = loginAndCallApi(account, videoApiUrl);
+        Map<String, Object> entries = null;
+        if (account == null) {
+            entries = callApi(account, videoApiUrl);
+        } else {
+            entries = loginAndCallApi(account, videoApiUrl, false);
+        }
         title = entries.get("title").toString();
         description = (String) entries.get("description");
 
@@ -277,7 +283,9 @@ public class BadoinkvrCom extends PluginForHost {
         }
         if (filename != null) {
             /* Pre defined filename -> Prefer that and use it as final filename. */
-            link.setName(filename);
+            if (!link.isNameSet()) {
+                link.setName(filename);
+            }
             link.setFinalFileName(filename);
         } else if (!StringUtils.isEmpty(title)) {
             title = videoid + "_" + title;
@@ -366,9 +374,8 @@ public class BadoinkvrCom extends PluginForHost {
         return restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
     }
 
-    private Map<String, Object> loginAndCallApi(final Account account, String checkUrl) throws Exception {
+    private Map<String, Object> loginAndCallApi(final Account account, String checkUrl, final boolean force) throws Exception {        
         synchronized (account) {
-            // final boolean 
             final boolean checkUrlGiven = checkUrl != null && !checkUrl.isEmpty();
             final String apiMainEndpoint = "https://" + this.getHost() + "/heresphere";
             final String apiAuthEndpoint = apiMainEndpoint + "/auth";
@@ -376,27 +383,30 @@ public class BadoinkvrCom extends PluginForHost {
                 checkUrl = apiMainEndpoint;
             }
             final boolean useToken = account != null;
-            boolean tokenAvailable = (account.getStringProperty(PROPERTY_ACCOUNT_TOKEN) != null) && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN).isEmpty();
-            
-            this.prepareBrowser(this.br);
-            
-            if ((useToken && tokenAvailable) || !useToken) {
-                Map<String, Object> response = this.callApi(account, checkUrl);
-                if (useToken) {
-                    final boolean accessLevelMatching = account.getType() == mapLoginStatus(response);
-                    if (accessLevelMatching) {
-                        logger.info("token login successful");
-                        return response;
-                    } else {
-                        logger.info("access level missmatch or token expired. re-login to try to elevate access level");
-                        /* Remove token so we won't try again with this one */
-                        account.removeProperty(PROPERTY_ACCOUNT_TOKEN);
-                    }
-                }
-                /* request without token */
-                return response;
+            boolean tokenAvailable = false;
+            if (account != null) {
+                tokenAvailable = (account.getStringProperty(PROPERTY_ACCOUNT_TOKEN) != null) && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN).isEmpty();
             }
-
+    
+            this.prepareBrowser(this.br);
+            if (!force) {
+                if ((useToken && tokenAvailable) || !useToken) {
+                    Map<String, Object> response = this.callApi(account, checkUrl);
+                    if (useToken) {
+                        final boolean accessLevelMatching = account.getType() == mapLoginStatus(response);
+                        if (accessLevelMatching) {
+                            logger.info("token login successful");
+                            return response;
+                        } else {
+                            logger.info("access level missmatch or token expired. re-login to try to elevate access level");
+                        }
+                    }
+                    /* request without token */
+                    return response;
+                }
+            }
+            /* Remove token so we won't try again with this one */
+            account.removeProperty(PROPERTY_ACCOUNT_TOKEN);
             /* login */
             logger.info("Performing full login");
             final Map<String, Object> entries = loginApi(account, apiAuthEndpoint);
@@ -439,7 +449,7 @@ public class BadoinkvrCom extends PluginForHost {
     @Override
     public AccountInfo fetchAccountInfo(final Account account) throws Exception {
         final AccountInfo ai = new AccountInfo();
-        final Map<String, Object> usermap = loginAndCallApi(account, null);
+        final Map<String, Object> usermap = loginAndCallApi(account, null, true);
         final Number loginstatus = (Number) usermap.get("access");
         ai.setUnlimitedTraffic();
         account.setType(mapLoginStatus(usermap));
