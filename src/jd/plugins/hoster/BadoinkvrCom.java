@@ -236,7 +236,7 @@ public class BadoinkvrCom extends PluginForHost {
             String studioUrlFormatted = "";
             List<String> tags = this.getTags(videoInfos, "Studio:");
             if (tags.size() > 0) {
-                studioUrlFormatted = tags.getFirst().toLowerCase().replace(' ', '-');
+                studioUrlFormatted = tags.get(0).toLowerCase().replace(' ', '-');
             }
             return studioUrlFormatted + "-" + videoUrlName + "-180_180x180_3dh_LR.mp4";
         }
