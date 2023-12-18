@@ -231,7 +231,8 @@ public class BadoinkvrCom extends PluginForHost {
     }
 
     private String getVideoFilename(final DownloadLink link, final String dllink, final Map<String, Object> videoInfos) {
-        if (this.getHost().endsWith("povr.com")) {
+        final String host = getHost();
+        if (host.endsWith("povr.com") || host.endsWith("wankzvr.com")) {
             String regexpr = "\\.com/(?:[^/]*/)?([^/]+)-\\d+";
             String videoUrlName = new Regex(link.getPluginPatternMatcher(), regexpr).getMatch(0);
             String studioUrlFormatted = "";
