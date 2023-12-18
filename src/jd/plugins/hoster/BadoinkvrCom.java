@@ -73,7 +73,7 @@ public class BadoinkvrCom extends PluginForHost {
         ret.add(new String[] { "babevr.com" });
         ret.add(new String[] { "vrcosplayx.com" });
         ret.add(new String[] { "18vr.com" });
-        // ret.add(new String[] { "czechvrnetwork.com" });
+        ret.add(new String[] { "czechvrnetwork.com" });
         ret.add(new String[] { "povr.com" });
         return ret;
     }
@@ -137,7 +137,7 @@ public class BadoinkvrCom extends PluginForHost {
                 }
 
             case "czechvrnetwork.com":
-                return "https://" + host + "/heresphere/videoID" + videoId;
+                return "https://www." + host + "/heresphere/videoID" + videoId;
             
             default:
                 return "https://" + host + "/heresphere/" + videoId;
@@ -257,13 +257,15 @@ public class BadoinkvrCom extends PluginForHost {
         String filename = null;
         String title = null;
         String description = null;
+
+        if (true) {
+            throw new PluginException(LinkStatus.ERROR_PREMIUM, "Did not rx premium level access");
+        }
         
-        /* Use heresphere API */
-        this.login(account, false);
-        boolean usePremiumRoute = this.decidePremiumRoute(account);
+        boolean usePremiumRoute = decidePremiumRoute(account);
         String videoApiUrl = buildHeresphereVideoUrl(videoid, usePremiumRoute);
-        br.postPageRaw(videoApiUrl, "");
-        final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
+        /* Use heresphere API */
+        final Map<String, Object> entries = loginAndCallApi(account, videoApiUrl);
         title = entries.get("title").toString();
         description = (String) entries.get("description");
 
@@ -334,49 +336,77 @@ public class BadoinkvrCom extends PluginForHost {
         }
     }
 
-    private Map<String, Object> login(final Account account, final boolean force) throws Exception {
+
+    private void prepareBrowser(final Browser br) {
         br.setCookiesExclusive(true);
         br.getHeaders().put("User-Agent", "HereSphere");
-        if (account == null) {
-            return null;
-        }
+    }
 
-        synchronized (account) {
+
+    private Map<String, Object> callApi(final Account account, String apiUrl) throws Exception {
+        prepareBrowser(this.br);
+        boolean useToken = account != null;
+        if (useToken) {
             String token = account.getStringProperty(PROPERTY_ACCOUNT_TOKEN);
-            final String urlpathAccountinfo = "/heresphere";
             if (token != null) {
-                // TODO: If we know a token validity, add forced token refresh every X time
                 prepLoginHeader(br, token);
-                if (!force) {
-                    /* Don't validate token */
-                    return null;
-                }
-                logger.info("Attempting token login");
-                br.postPageRaw("https://" + this.getHost() + urlpathAccountinfo, "");
-                final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
-                if (isLoggedin(entries)) {
-                    logger.info("token login successful");
-                    return entries;
-                } else {
-                    logger.info("token login failed: Token expired?");
-                    /* Remove token so we won't try again with this one */
-                    account.removeProperty(PROPERTY_ACCOUNT_TOKEN);
-                }
             }
+        }
+        br.postPageRaw(apiUrl, "");
+        final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
+        return entries;
+    }
+
+    private Map<String, Object> loginApi(final Account account, String apiAuthEndpoint) throws Exception {
+        prepareBrowser(this.br);
+        final Map<String, Object> postdata = new HashMap<String, Object>();
+        postdata.put("username", account.getUser());
+        postdata.put("password", account.getPass());
+        br.postPageRaw(apiAuthEndpoint, JSonStorage.serializeToJson(postdata));
+        return restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
+    }
+
+    private Map<String, Object> loginAndCallApi(final Account account, String checkUrl) throws Exception {
+        synchronized (account) {
+            // final boolean 
+            final boolean checkUrlGiven = checkUrl != null && !checkUrl.isEmpty();
+            final String apiMainEndpoint = "https://" + this.getHost() + "/heresphere";
+            final String apiAuthEndpoint = apiMainEndpoint + "/auth";
+            if (!checkUrlGiven) {
+                checkUrl = apiMainEndpoint;
+            }
+            final boolean useToken = account != null;
+            boolean tokenAvailable = (account.getStringProperty(PROPERTY_ACCOUNT_TOKEN) != null) && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN).isEmpty();
+            
+            this.prepareBrowser(this.br);
+            
+            if ((useToken && tokenAvailable) || !useToken) {
+                Map<String, Object> response = this.callApi(account, checkUrl);
+                if (useToken) {
+                    final boolean accessLevelMatching = account.getType() == mapLoginStatus(response);
+                    if (accessLevelMatching) {
+                        logger.info("token login successful");
+                        return response;
+                    } else {
+                        logger.info("access level missmatch or token expired. re-login to try to elevate access level");
+                        /* Remove token so we won't try again with this one */
+                        account.removeProperty(PROPERTY_ACCOUNT_TOKEN);
+                    }
+                }
+                /* request without token */
+                return response;
+            }
+
+            /* login */
             logger.info("Performing full login");
-            final Map<String, Object> postdata = new HashMap<String, Object>();
-            postdata.put("username", account.getUser());
-            postdata.put("password", account.getPass());
-            br.postPageRaw("https://" + getHost() + "/heresphere/auth", JSonStorage.serializeToJson(postdata));
-            final Map<String, Object> entries = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
-            if (!isLoggedin(entries)) {
+            final Map<String, Object> entries = loginApi(account, apiAuthEndpoint);
+            boolean isLoggedIn = mapLoginStatus(entries) == AccountType.FREE || mapLoginStatus(entries) == AccountType.PREMIUM;
+            if (!isLoggedIn) {
                 throw new AccountInvalidException();
             }
-            token = entries.get("auth-token").toString();
+            String token = entries.get("auth-token").toString();
             account.setProperty(PROPERTY_ACCOUNT_TOKEN, token);
-            prepLoginHeader(br, token);
-            br.getPage(urlpathAccountinfo);
-            return entries;
+            return callApi(account, checkUrl);
         }
     }
 
@@ -384,26 +414,35 @@ public class BadoinkvrCom extends PluginForHost {
         br.getHeaders().put("auth-token", token);
     }
 
-    private boolean isLoggedin(final Map<String, Object> entries) {
+    // /* !!!!! TODO check deprecation */
+    // private boolean isLoggedin(final Map<String, Object> entries) {
+    //     final Number loginstatus = (Number) entries.get("access");
+    //     if (loginstatus != null && (loginstatus.intValue() == 0 || loginstatus.intValue() == 1)) {
+    //         return true;
+    //     } else {
+    //         return false;
+    //     }
+    // }
+
+    private AccountType mapLoginStatus(final Map<String, Object> entries) {
         final Number loginstatus = (Number) entries.get("access");
-        if (loginstatus != null && (loginstatus.intValue() == 0 || loginstatus.intValue() == 1)) {
-            return true;
-        } else {
-            return false;
+        if (loginstatus != null) {
+            if (loginstatus.intValue() == 0) {
+                return AccountType.FREE;
+            } else if (loginstatus.intValue() == 1) {
+                return AccountType.PREMIUM;
+            }
         }
+        return AccountType.UNKNOWN;
     }
 
     @Override
     public AccountInfo fetchAccountInfo(final Account account) throws Exception {
         final AccountInfo ai = new AccountInfo();
-        final Map<String, Object> usermap = login(account, true);
+        final Map<String, Object> usermap = loginAndCallApi(account, null);
         final Number loginstatus = (Number) usermap.get("access");
         ai.setUnlimitedTraffic();
-        if (loginstatus.intValue() == 1) {
-            account.setType(AccountType.PREMIUM);
-        } else {
-            account.setType(AccountType.FREE);
-        }
+        account.setType(mapLoginStatus(usermap));
         return ai;
     }
 
