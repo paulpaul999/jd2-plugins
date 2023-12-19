@@ -160,6 +160,24 @@ public class BadoinkvrCom extends PluginForHost {
         return "https://" + host + "/heresphere/";
     }
 
+    private String getVideoFilename(final DownloadLink link, final String dllink, final Map<String, Object> videoInfos) {
+        final String host = getHost();
+        if (host.endsWith("povr.com") || host.endsWith("wankzvr.com")) {
+            String regexpr = "\\.com/(?:[^/]*/)?([^/]+)-\\d+";
+            String videoUrlName = new Regex(link.getPluginPatternMatcher(), regexpr).getMatch(0);
+            String studioUrlFormatted = "";
+            List<String> tags = this.getTags(videoInfos, "Studio:");
+            if (tags.size() > 0) {
+                studioUrlFormatted = tags.get(0).toLowerCase().replace(' ', '-');
+            }
+            return studioUrlFormatted + "-" + videoUrlName + "-180_180x180_3dh_LR.mp4";
+        }
+
+        /* default: extract filename from dllink */
+        String default_regexpr = "([^/?&=]+\\.(?:mp4|webm|mkv))";
+        return new Regex(dllink, default_regexpr).getMatch(0);
+    }
+
     @Override
     public String getLinkID(final DownloadLink link) {
         /* TODO: differentiate premium/trailer */
@@ -231,7 +249,7 @@ public class BadoinkvrCom extends PluginForHost {
         return pickedUrl;
     }
 
-    public List<String> getTags(final Map<String, Object> videoInfos, final String prefix) {
+    private List<String> getTags(final Map<String, Object> videoInfos, final String prefix) {
         List<String> ret = new ArrayList<String>();
 
         List<Map<String, String>> tags = (List<Map<String, String>>) videoInfos.get("tags");
@@ -243,24 +261,6 @@ public class BadoinkvrCom extends PluginForHost {
             }
         }
         return ret;
-    }
-
-    private String getVideoFilename(final DownloadLink link, final String dllink, final Map<String, Object> videoInfos) {
-        final String host = getHost();
-        if (host.endsWith("povr.com") || host.endsWith("wankzvr.com")) {
-            String regexpr = "\\.com/(?:[^/]*/)?([^/]+)-\\d+";
-            String videoUrlName = new Regex(link.getPluginPatternMatcher(), regexpr).getMatch(0);
-            String studioUrlFormatted = "";
-            List<String> tags = this.getTags(videoInfos, "Studio:");
-            if (tags.size() > 0) {
-                studioUrlFormatted = tags.get(0).toLowerCase().replace(' ', '-');
-            }
-            return studioUrlFormatted + "-" + videoUrlName + "-180_180x180_3dh_LR.mp4";
-        }
-
-        /* default: extract filename from dllink */
-        String default_regexpr = "([^/?&=]+\\.(?:mp4|webm|mkv))";
-        return new Regex(dllink, default_regexpr).getMatch(0);
     }
 
     private AvailableStatus requestFileInformation(final DownloadLink link, final Account account, final boolean isDownload) throws Exception {
