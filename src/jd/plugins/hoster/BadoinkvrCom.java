@@ -124,25 +124,27 @@ public class BadoinkvrCom extends PluginForHost {
     }
 
     public String buildHeresphereVideoUrl(String videoId, boolean premiumRoute) {
-        String host = this.getHost();
-        switch (host) {
-            case "badoinkvr.com":
-            case "kinkvr.com":
-            case "babevr.com":
-            case "vrcosplayx.com":
-            case "18vr.com":
-                if (premiumRoute) {
-                    return "https://" + host + "/heresphere/video/" + videoId;
-                } else {
-                    return "https://" + host + "/heresphere/video/" + videoId + "/trailer";
-                }
+        final String host = this.getHost();
+        boolean isBadoinkNetwork = host.equals("badoinkvr.com") 
+                                || host.equals("kinkvr.com")
+                                || host.equals("babevr.com")
+                                || host.equals("vrcosplayx.com")
+                                || host.equals("18vr.com");
 
-            case "czechvrnetwork.com":
-                return "https://" + host + "/heresphere/videoID" + videoId;
-            
-            default:
-                return "https://" + host + "/heresphere/" + videoId;
+        if (isBadoinkNetwork) {
+            if (premiumRoute) {
+                return "https://" + host + "/heresphere/video/" + videoId;
+            } else {
+                return "https://" + host + "/heresphere/video/" + videoId + "/trailer";
+            }
         }
+
+        if (host.equals("czechvrnetwork.com")) {
+            return "https://" + host + "/heresphere/videoID" + videoId;
+        }
+
+        /* default */
+        return "https://" + host + "/heresphere/" + videoId;
     }
 
     @Override
