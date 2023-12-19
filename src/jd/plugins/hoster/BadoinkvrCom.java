@@ -410,27 +410,20 @@ public class BadoinkvrCom extends PluginForHost {
             if (!checkUrlGiven) {
                 checkUrl = apiMainEndpoint;
             }
-            final boolean useToken = account != null; /* TODO: consider removing this, because this is implied by synchronized(account) -> never null */
             boolean tokenAvailable = false;
             if (account != null) {
                 tokenAvailable = (account.getStringProperty(PROPERTY_ACCOUNT_TOKEN) != null) && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN).isEmpty();
             }
     
             this.prepareBrowser(this.br);
-            if (!force) {
-                if ((useToken && tokenAvailable) || !useToken) {
-                    Map<String, Object> response = this.callApi(account, checkUrl);
-                    if (useToken) {
-                        final boolean accessLevelMatching = account.getType() == mapLoginStatus(response);
-                        if (accessLevelMatching) {
-                            logger.info("token login successful");
-                            return response;
-                        } else {
-                            logger.info("access level missmatch or token expired. re-login to try to elevate access level");
-                        }
-                    }
-                    /* request without token */
+            if (!force && tokenAvailable) {
+                Map<String, Object> response = this.callApi(account, checkUrl);
+                final boolean accessLevelMatching = account.getType() == mapLoginStatus(response);
+                if (accessLevelMatching) {
+                    logger.info("token login successful");
                     return response;
+                } else {
+                    logger.info("access level missmatch or token expired. re-login to try to elevate access level");
                 }
             }
             /* Remove token so we won't try again with this one */
