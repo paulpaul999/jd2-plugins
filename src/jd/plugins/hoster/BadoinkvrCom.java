@@ -97,7 +97,7 @@ public class BadoinkvrCom extends PluginForHost {
              * cosplaypornvideo: vrcosplayx.com </br>
              * bdsm-vr-video: kinkvr.com
              */
-            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:members/)?(?:[^/]+/)?[^/]*?(\\d{3,})");
+            ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/(?:members/)?(?:[^/]+/)?[^/]*-(\\d{3,})");
             // ret.add("https?://(?:www\\.)?" + buildHostsPatternPart(domains) + "/heresphere/(.*)");
         }
         return ret.toArray(new String[0]);
