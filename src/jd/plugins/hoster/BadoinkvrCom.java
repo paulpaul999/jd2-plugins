@@ -170,7 +170,7 @@ public class BadoinkvrCom extends PluginForHost {
             if (tags.size() > 0) {
                 studioUrlFormatted = tags.get(0).toLowerCase().replace(' ', '-');
             }
-            return studioUrlFormatted + "-" + videoUrlName + "-180_180x180_3dh_LR.mp4";
+            return studioUrlFormatted + "-" + videoUrlName + "-180_180x180_3dh_LR.mp4"; /* consider handling the case of non-VR180 format */
         }
 
         /* default: extract filename from dllink */
@@ -199,7 +199,7 @@ public class BadoinkvrCom extends PluginForHost {
         return requestFileInformation(link, account, false);
     }
 
-    private boolean decidePremiumRoute(final Account account) {
+    private boolean premiumAccessAvailable(final Account account) {
         if (account != null && account.getType() == AccountType.PREMIUM) {
             return true;
         } else {
@@ -281,7 +281,7 @@ public class BadoinkvrCom extends PluginForHost {
         //     throw new PluginException(LinkStatus.ERROR_PREMIUM, "Did not rx premium level access");
         // }
         
-        final boolean maxPossibleRoute = decidePremiumRoute(account);
+        final boolean maxPossibleRoute = premiumAccessAvailable(account);
         final Boolean linkAccessLevel = (Boolean) link.getProperty(PROPERTY_PREMIUM_DL, Boolean.valueOf(maxPossibleRoute));
         link.setProperty(PROPERTY_PREMIUM_DL, linkAccessLevel);
         final boolean usePremiumRoute = linkAccessLevel.booleanValue();
