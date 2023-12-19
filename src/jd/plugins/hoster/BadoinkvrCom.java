@@ -73,7 +73,7 @@ public class BadoinkvrCom extends PluginForHost {
         ret.add(new String[] { "babevr.com" });
         ret.add(new String[] { "vrcosplayx.com" });
         ret.add(new String[] { "18vr.com" });
-        // ret.add(new String[] { "www.czechvrnetwork.com" }); /* TODO handle www. subdomain */
+        ret.add(new String[] { "czechvrnetwork.com" });
         ret.add(new String[] { "povr.com" });
         ret.add(new String[] { "wankzvr.com" });
         return ret;
@@ -123,8 +123,13 @@ public class BadoinkvrCom extends PluginForHost {
         return "https://" + getHost() + "/terms";
     }
 
-    public String buildHeresphereVideoUrl(String videoId, boolean premiumRoute) {
+    public String buildHeresphereVideoUrl(String videoId, DownloadLink link) {
         final String host = this.getHost();
+        final String apiBaseUrl = getHeresphereApiBaseUrl();
+
+        final Boolean premiumRouteB = (Boolean) link.getProperty(PROPERTY_PREMIUM_DL);
+        final boolean premiumRoute = premiumRouteB != null ? premiumRouteB.booleanValue() : false;
+
         boolean isBadoinkNetwork = host.equals("badoinkvr.com") 
                                 || host.equals("kinkvr.com")
                                 || host.equals("babevr.com")
@@ -133,18 +138,26 @@ public class BadoinkvrCom extends PluginForHost {
 
         if (isBadoinkNetwork) {
             if (premiumRoute) {
-                return "https://" + host + "/heresphere/video/" + videoId;
+                return apiBaseUrl + "/video/" + videoId;
             } else {
-                return "https://" + host + "/heresphere/video/" + videoId + "/trailer";
+                return apiBaseUrl + "/video/" + videoId + "/trailer";
             }
         }
 
         if (host.equals("czechvrnetwork.com")) {
-            return "https://" + host + "/heresphere/videoID" + videoId;
+            return apiBaseUrl + "/videoID" + videoId;
         }
 
         /* default */
-        return "https://" + host + "/heresphere/" + videoId;
+        return apiBaseUrl + "/" + videoId;
+    }
+
+    public String getHeresphereApiBaseUrl() {
+        final String host = this.getHost();
+        if (host.endsWith("czechvrnetwork.com")) {
+            return "https://" + "www." + host + "/heresphere";
+        }
+        return "https://" + host + "/heresphere/";
     }
 
     @Override
@@ -276,7 +289,7 @@ public class BadoinkvrCom extends PluginForHost {
             throw new AccountRequiredException();
         }
 
-        String videoApiUrl = buildHeresphereVideoUrl(videoid, usePremiumRoute);
+        String videoApiUrl = buildHeresphereVideoUrl(videoid, link);
         Account accountOrNull = usePremiumRoute ? account : null; /* TODO: decide if loggedIn=FREE is possible */
 
         /* Use heresphere API */
