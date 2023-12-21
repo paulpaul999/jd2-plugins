@@ -243,7 +243,7 @@ public class PlayaVr extends PluginForHost {
         synchronized (account) {
             final boolean tokenExists = !StringUtils.isEmpty((String) account.getProperty(PROPERTY_ACCOUNT_TOKEN))
                                         && !StringUtils.isEmpty((String) account.getProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH));
-            boolean playaIdGiven = !StringUtils.isEmpty(playaId);
+            final boolean fetchVidInfo = !StringUtils.isEmpty(playaId);
             boolean loginAttempted = false;
 
             if (!tokenExists) {
@@ -252,9 +252,9 @@ public class PlayaVr extends PluginForHost {
             }
 
             /* soft check of token validity: either by piggybacking on videoInfo or by requesting account info */
-            final Map<String, Object> infoMap = playaIdGiven ? requestVideoInfo(account, playaId) : requestAccountInfo(account);
+            final Map<String, Object> infoMap = fetchVidInfo ? requestVideoInfo(account, playaId) : requestAccountInfo(account);
             if (readStatusCode(infoMap) == PLAYA_STATUS_OK) {
-                return playaIdGiven ? infoMap : null;
+                return fetchVidInfo ? infoMap : null;
             }
 
             if (loginAttempted) {
@@ -266,7 +266,7 @@ public class PlayaVr extends PluginForHost {
                 login(account);
             }
 
-            if (!playaIdGiven) {
+            if (!fetchVidInfo) {
                 return null;
             }
 
