@@ -1,5 +1,6 @@
 package jd.plugins.hoster;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -7,11 +8,13 @@ import java.util.Map;
 
 import org.appwork.storage.JSonStorage;
 import org.appwork.storage.TypeRef;
-import org.jdownloader.myjdownloader.client.json.AvailableLinkState;
+import org.appwork.utils.StringUtils;
 import org.jdownloader.plugins.controller.LazyPlugin;
 
 import jd.PluginWrapper;
 import jd.controlling.AccountController;
+import jd.http.Browser;
+import jd.http.URLConnectionAdapter;
 import jd.http.requests.GetRequest;
 import jd.parser.Regex;
 import jd.plugins.Account;
@@ -22,6 +25,8 @@ import jd.plugins.AccountRequiredException;
 import jd.plugins.DownloadLink;
 import jd.plugins.DownloadLink.AvailableStatus;
 import jd.plugins.HostPlugin;
+import jd.plugins.LinkStatus;
+import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 
 @HostPlugin(revision = "$Revision: 48487 $", interfaceVersion = 3, names = {}, urls = {})
@@ -129,6 +134,31 @@ public class PlayaVr extends PluginForHost {
 
     private boolean login(final Account account) throws Exception {
         synchronized (account) {
+            final String apiEndpoint = getPlayaApiBase() + "auth/guest";
+
+            // final Map<String, Object> postdata = new HashMap<String, Object>();
+            // postdata.put("email", account.getUser());
+            // postdata.put("password", account.getPass());
+            br.postPageRaw(apiEndpoint, (String) null);
+            Map<String, Object> res = restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
+            
+            int statusCode = readStatusCode(res);
+            if (statusCode != PLAYA_STATUS_OK) {
+                throw new AccountInvalidException();
+            }
+
+            Map<String, Object> data = (Map<String, Object>) res.get("data");
+            Map<String, Object> token = (Map<String, Object>) data.get("token");
+            account.setProperty(PROPERTY_ACCOUNT_TOKEN, token.get("access_token"));
+            account.setProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH, token.get("refresh_token"));
+
+            return true;
+        }
+    }
+
+
+    private boolean login_(final Account account) throws Exception {
+        synchronized (account) {
             final String apiEndpoint = getPlayaApiBase() + "auth/user";
 
             final Map<String, Object> postdata = new HashMap<String, Object>();
@@ -150,6 +180,7 @@ public class PlayaVr extends PluginForHost {
             return true;
         }
     }
+
 
     private boolean refreshLogin(final Account account) throws Exception {
         synchronized (account) {
@@ -182,33 +213,38 @@ public class PlayaVr extends PluginForHost {
         return restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
     }
 
+    private Map<String, Object> requestAccountInfo(final Account account) {
+        /* TODO!!! endpoint ".../account/info" */
+    }
+
     private Map<String, Object> loginAndCallApi(final Account account, final String playaId) throws Exception {   
         /** Logic
          * try:
          * - If no token yet -> login & get video
-         * - Try getting video
-         * - Refreshing the token
-         * - New login
+         *   Or else:
+         *      - Try getting video
+         *      - Refreshing the token
+         *      - New login
          */
         
         synchronized (account) {
-            final boolean tokenExists = account.getProperty(PROPERTY_ACCOUNT_TOKEN) != null
-                                        && account.getProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH) != null
-                                        && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN).isEmpty()
-                                        && !account.getStringProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH).isEmpty();
-            boolean loginAlreadyTried = false;
+            final boolean tokenExists = !StringUtils.isEmpty((String) account.getProperty(PROPERTY_ACCOUNT_TOKEN))
+                                        && !StringUtils.isEmpty((String) account.getProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH));
+            boolean playaIdGiven = StringUtils.isEmpty(playaId);
+            boolean loginAttempted = false;
 
             if (!tokenExists) {
                 login(account);
-                loginAlreadyTried = true;
+                loginAttempted = true;
             }
 
-            Map<String, Object> videoInfo = requestVideoInfo(account, playaId);
-            if (readStatusCode(videoInfo) == PLAYA_STATUS_OK) {
-                return videoInfo;
+            /* soft check of token validity: either by piggybacking on videoInfo or by requesting account info */
+            final Map<String, Object> infoMap = playaIdGiven ? requestVideoInfo(account, playaId) : requestAccountInfo(account);
+            if (readStatusCode(infoMap) == PLAYA_STATUS_OK) {
+                return playaIdGiven ? infoMap : null;
             }
 
-            if (loginAlreadyTried) {
+            if (loginAttempted) {
                 throw new AccountInvalidException();
             }
 
@@ -217,7 +253,7 @@ public class PlayaVr extends PluginForHost {
                 login(account);
             }
 
-            videoInfo = requestVideoInfo(account, playaId);
+            final Map<String, Object> videoInfo = requestVideoInfo(account, playaId);
             if (readStatusCode(videoInfo) == PLAYA_STATUS_OK) {
                 return videoInfo;
             }
@@ -247,12 +283,37 @@ public class PlayaVr extends PluginForHost {
         final String playaId = getPlayaId(link);
         final String videoApiUrl = getPlayaApiBase() + playaId;
 
-        final Map<String, Object> videoInfo = loginAndCallApi(account, playaId);
-        if (readStatusCode(videoInfo) != PLAYA_STATUS_OK) {
+        final Map<String, Object> vidInfo = loginAndCallApi(account, playaId);
+        if (readStatusCode(vidInfo) != PLAYA_STATUS_OK) {
             return AvailableStatus.FALSE;
         }
 
         /* TODO: pick quality, dl url, filename */
+        final Map<String, Object> vidInfoData = (Map<String, Object>) vidInfo.get("data");
+        final Map<String, Object> vidInfoDataVid = (Map<String, Object>) vidInfoData.get("video");
+        final Map<String, String> videoLinks = (Map<String, String>) vidInfoDataVid.get("video-links"); 
+
+
+        int maxResolution = -1;
+        String maxResolutionKey = null;
+        String regexpr = "\\b(\\d+)K"; /* https://regex101.com/r/OGL9A8/1 */
+        for (String videoLinkKey : videoLinks.keySet()) {
+            String resolutionStr = new Regex(videoLinkKey, regexpr).getMatch(0);
+            int resolution = -1;
+            try {
+                resolution = Integer.valueOf(resolutionStr);
+            } catch (Exception e) {
+                continue;
+            }
+            if (resolution > maxResolution) {
+                maxResolution = resolution;
+                maxResolutionKey = videoLinkKey;
+            }
+        }
+
+        if (maxResolutionKey != null) {
+            this.dllink = videoLinks.get(maxResolutionKey);
+        }
 
         return AvailableStatus.TRUE;
     }
@@ -263,6 +324,19 @@ public class PlayaVr extends PluginForHost {
         return requestFileInformation(link, account, false);
     }
 
+    private void handleConnectionErrors(final Browser br, final URLConnectionAdapter con) throws PluginException, IOException {
+        if (!this.looksLikeDownloadableContent(con)) {
+            br.followConnection(true);
+            if (con.getResponseCode() == 403) {
+                throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 403", 60 * 60 * 1000l);
+            } else if (con.getResponseCode() == 404) {
+                throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Server error 404", 60 * 60 * 1000l);
+            } else {
+                throw new PluginException(LinkStatus.ERROR_TEMPORARILY_UNAVAILABLE, "Video broken?");
+            }
+        }
+    }
+
     @Override
     public void handleFree(DownloadLink link) throws Exception {
         throw new AccountRequiredException();
@@ -270,6 +344,14 @@ public class PlayaVr extends PluginForHost {
 
     @Override
     public void handlePremium(final DownloadLink link, final Account account) throws Exception {
+        requestFileInformation(link, account, true);
+        if (StringUtils.isEmpty(dllink)) {
+            /* No download or only trailer download possible. */
+            throw new AccountRequiredException();
+        }
+        dl = jd.plugins.BrowserAdapter.openDownload(br, link, dllink, free_resume, free_maxchunks);
+        handleConnectionErrors(br, dl.getConnection());
+        dl.startDownload();
     }
 
     @Override
