@@ -14,6 +14,7 @@ import org.jdownloader.plugins.controller.LazyPlugin;
 import jd.PluginWrapper;
 import jd.controlling.AccountController;
 import jd.http.Browser;
+import jd.http.Request;
 import jd.http.URLConnectionAdapter;
 import jd.http.requests.GetRequest;
 import jd.parser.Regex;
@@ -205,16 +206,28 @@ public class PlayaVr extends PluginForHost {
         }
     }
 
+    private Request makeAuthorized(final Request req, final Account account) throws Exception {
+        if (StringUtils.isEmpty(account.getStringProperty(PROPERTY_ACCOUNT_TOKEN))) {
+            throw new AccountRequiredException();
+        }
+        req.getHeaders().put("Authorization", "Bearer " + account.getStringProperty(PROPERTY_ACCOUNT_TOKEN));
+        return req;
+    }
+
     private Map<String, Object> requestVideoInfo(final Account account, final String playaId) throws Exception {
         final String apiEndpoint = getPlayaApiBase() + "video/" + playaId;
         final GetRequest request = br.createGetRequest(apiEndpoint);
-        request.getHeaders().put("Authorization", "Bearer " + account.getStringProperty(PROPERTY_ACCOUNT_TOKEN));
+        makeAuthorized(request, account);
         br.getPage(request);
         return restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
     }
 
-    private Map<String, Object> requestAccountInfo(final Account account) {
-        /* TODO!!! endpoint ".../account/info" */
+    private Map<String, Object> requestAccountInfo(final Account account) throws Exception {
+        final String apiEndpoint = getPlayaApiBase() + "account/info";
+        final GetRequest request = br.createGetRequest(apiEndpoint);
+        makeAuthorized(request, account);
+        br.getPage(request);
+        return restoreFromString(br.getRequest().getHtmlCode(), TypeRef.MAP);
     }
 
     private Map<String, Object> loginAndCallApi(final Account account, final String playaId) throws Exception {   
@@ -230,7 +243,7 @@ public class PlayaVr extends PluginForHost {
         synchronized (account) {
             final boolean tokenExists = !StringUtils.isEmpty((String) account.getProperty(PROPERTY_ACCOUNT_TOKEN))
                                         && !StringUtils.isEmpty((String) account.getProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH));
-            boolean playaIdGiven = StringUtils.isEmpty(playaId);
+            boolean playaIdGiven = !StringUtils.isEmpty(playaId);
             boolean loginAttempted = false;
 
             if (!tokenExists) {
@@ -266,11 +279,9 @@ public class PlayaVr extends PluginForHost {
     @Override
     public AccountInfo fetchAccountInfo(final Account account) throws Exception {
         final AccountInfo ai = new AccountInfo();
-        final boolean loggedIn = login(account);
+        loginAndCallApi(account, null);
         ai.setUnlimitedTraffic();
-        if (loggedIn) {
-            account.setType(AccountType.PREMIUM);
-        }
+        account.setType(AccountType.PREMIUM);
         return ai;
     }
 
