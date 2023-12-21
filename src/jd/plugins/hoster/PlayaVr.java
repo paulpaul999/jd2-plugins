@@ -330,7 +330,7 @@ public class PlayaVr extends PluginForHost {
             this.dllink = videoLinks.get(maxResolutionKey);
         }
 
-        return AvailableStatus.TRUE;
+        return AvailableStatus.TRUE; // TODO: what about false case? -> dllink-isempty() and(!) return FALSE
     }
 
     @Override
