@@ -266,6 +266,10 @@ public class PlayaVr extends PluginForHost {
                 login(account);
             }
 
+            if (!playaIdGiven) {
+                return null;
+            }
+
             final Map<String, Object> videoInfo = requestVideoInfo(account, playaId);
             if (readStatusCode(videoInfo) == PLAYA_STATUS_OK) {
                 return videoInfo;
