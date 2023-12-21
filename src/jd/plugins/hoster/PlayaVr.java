@@ -266,16 +266,15 @@ public class PlayaVr extends PluginForHost {
                 login(account);
             }
 
-            if (!fetchVidInfo) {
-                return null;
+            if (fetchVidInfo) {
+                final Map<String, Object> videoInfo = requestVideoInfo(account, playaId);
+                if (readStatusCode(videoInfo) == PLAYA_STATUS_OK) {
+                    return videoInfo;
+                }
+                throw new AccountInvalidException();
             }
 
-            final Map<String, Object> videoInfo = requestVideoInfo(account, playaId);
-            if (readStatusCode(videoInfo) == PLAYA_STATUS_OK) {
-                return videoInfo;
-            }
-
-            throw new AccountInvalidException();
+            return null;
         }
     }
 
