@@ -51,7 +51,6 @@ public class PlayaVr extends PluginForHost {
         ret.add(new String[] { "vrbtrans.com" });
         ret.add(new String[] { "vrbgay.com" });
         ret.add(new String[] { "blowvr.com" });
-        // ret.add(new String[] { "dezyred.com" }); /* interactive site, have to check if also consistent to API spec */
         return ret;
     }
 
@@ -133,7 +132,21 @@ public class PlayaVr extends PluginForHost {
         return statusCode.intValue();
     }
 
+
     private boolean login(final Account account) throws Exception {
+        /* dummy for refresh only */
+        synchronized (account) {
+            String refreshToken = account.getPass();
+            account.setProperty(PROPERTY_ACCOUNT_TOKEN_REFRESH, refreshToken);
+            if (!refreshLogin(account)) {
+               throw new AccountInvalidException("Refresh Token is stale");
+            }
+            return true;
+        }
+    }
+
+
+    private boolean loginGuest(final Account account) throws Exception {
         synchronized (account) {
             final String apiEndpoint = getPlayaApiBase() + "auth/guest";
 
@@ -327,9 +340,10 @@ public class PlayaVr extends PluginForHost {
 
         if (maxResolutionKey != null) {
             this.dllink = videoLinks.get(maxResolutionKey);
+            return AvailableStatus.TRUE;
         }
-
-        return AvailableStatus.TRUE; // TODO: what about false case? -> dllink-isempty() and(!) return FALSE
+        
+        return AvailableStatus.FALSE;
     }
 
     @Override
