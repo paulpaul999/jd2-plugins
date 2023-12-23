@@ -247,10 +247,11 @@ public class PlayaVr extends PluginForHost {
         /** Logic
          * try:
          * - If no token yet -> login & get video
-         *   Or else:
+         *   Otherwise:
          *      - Try getting video
-         *      - Refreshing the token
-         *      - New login
+         *      Not successful:
+         *          - Refreshing the token
+         *          - New login
          */
         
         synchronized (account) {
