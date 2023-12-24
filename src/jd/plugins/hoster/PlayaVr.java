@@ -10,6 +10,8 @@ import org.appwork.storage.JSonStorage;
 import org.appwork.storage.TypeRef;
 import org.appwork.utils.StringUtils;
 import org.jdownloader.plugins.controller.LazyPlugin;
+import org.tmatesoft.sqljet.core.internal.lang.SqlParser.bool_return;
+import org.tmatesoft.sqljet.core.internal.lang.SqlParser.qualified_table_name_return;
 
 import jd.PluginWrapper;
 import jd.controlling.AccountController;
@@ -27,6 +29,7 @@ import jd.plugins.DownloadLink;
 import jd.plugins.DownloadLink.AvailableStatus;
 import jd.plugins.HostPlugin;
 import jd.plugins.LinkStatus;
+import jd.plugins.Plugin;
 import jd.plugins.PluginException;
 import jd.plugins.PluginForHost;
 
@@ -292,6 +295,36 @@ public class PlayaVr extends PluginForHost {
         }
     }
 
+    private String pickVideoQuality(final Map<String, Object> vidInfo) {
+        final Map<String, Object> vidInfoData = (Map<String, Object>) vidInfo.get("data");
+        final Map<String, Object> vidInfoDataVid = (Map<String, Object>) vidInfoData.get("video");
+        final Map<String, String> videoLinks = (Map<String, String>) vidInfoDataVid.get("video-links"); 
+        
+        if (videoLinks.isEmpty()) {
+            return null;
+        };
+
+        boolean firstLoop = true;
+        int maxResolution = -1;
+        String maxResolutionKey = null;
+        String regexpr = "\\b(\\d+)K"; /* https://regex101.com/r/OGL9A8/1 */
+        for (String videoLinkKey : videoLinks.keySet()) {
+            String resolutionStr = new Regex(videoLinkKey, regexpr).getMatch(0);
+            int resolution = -1;
+            try {
+                resolution = Integer.valueOf(resolutionStr);
+            } catch (Exception e) {
+                continue;
+            }
+            if (resolution > maxResolution) {
+                maxResolution = resolution;
+                maxResolutionKey = videoLinkKey;
+            }
+        }
+        
+        final String pickedUrl = maxResolutionKey == null ? null : videoLinks.get(maxResolutionKey);
+        return pickedUrl;
+    }
 
     @Override
     public AccountInfo fetchAccountInfo(final Account account) throws Exception {
@@ -316,35 +349,36 @@ public class PlayaVr extends PluginForHost {
             return AvailableStatus.FALSE;
         }
 
-        /* TODO: pick quality, dl url, filename */
-        final Map<String, Object> vidInfoData = (Map<String, Object>) vidInfo.get("data");
-        final Map<String, Object> vidInfoDataVid = (Map<String, Object>) vidInfoData.get("video");
-        final Map<String, String> videoLinks = (Map<String, String>) vidInfoDataVid.get("video-links"); 
-
-
-        int maxResolution = -1;
-        String maxResolutionKey = null;
-        String regexpr = "\\b(\\d+)K"; /* https://regex101.com/r/OGL9A8/1 */
-        for (String videoLinkKey : videoLinks.keySet()) {
-            String resolutionStr = new Regex(videoLinkKey, regexpr).getMatch(0);
-            int resolution = -1;
-            try {
-                resolution = Integer.valueOf(resolutionStr);
-            } catch (Exception e) {
-                continue;
-            }
-            if (resolution > maxResolution) {
-                maxResolution = resolution;
-                maxResolutionKey = videoLinkKey;
-            }
+        final String pickedUrl = pickVideoQuality(vidInfo);
+        if (pickedUrl == null) {
+            throw new PluginException(LinkStatus.ERROR_FILE_NOT_FOUND);
         }
+        this.dllink = pickedUrl;
 
-        if (maxResolutionKey != null) {
-            this.dllink = videoLinks.get(maxResolutionKey);
-            return AvailableStatus.TRUE;
+        /* filename */
+        String default_regexpr = "([^/?&=]+\\.(?:mp4|webm|mkv))";
+        try {
+            final String filename = new Regex(this.dllink, default_regexpr).getMatch(0);
+            link.setFinalFileName(filename);
+        } catch (Exception e) {
         }
         
-        return AvailableStatus.FALSE;
+        /* file size */
+        URLConnectionAdapter con = null;
+        try {
+            con = br.openHeadConnection(this.dllink);
+            handleConnectionErrors(br, con);
+            if (con.getCompleteContentLength() > 0) {
+                link.setVerifiedFileSize(con.getCompleteContentLength());
+            }
+        } finally {
+            try {
+                con.disconnect();
+            } catch (final Throwable e) {
+            }
+        }
+
+        return AvailableStatus.TRUE;
     }
 
     @Override
